@@ -1,0 +1,50 @@
+{
+  "name": "animal-profile",
+  "description": "Structured animal summary output.",
+  "provider": "openai",
+  "model": "gpt-4.1-mini",
+  "systemPrompt": "You are an animal encyclopedia assistant. Return concise factual summaries.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "animal": {
+        "type": "string"
+      }
+    },
+    "required": ["animal"],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "summary": {
+        "type": "string"
+      },
+      "habitats": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "traits": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": ["name", "summary", "habitats", "traits"],
+    "additionalProperties": false
+  },
+  "preprocess": ["trim-string-input"],
+  "postprocess": ["trim-text-output"],
+  "executionOptions": {
+    "context": false,
+    "stream": false,
+    "timeoutMs": 30000,
+    "temperature": 0.2
+  }
+}

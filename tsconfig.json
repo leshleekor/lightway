@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "baseUrl": ".",
+    "paths": {
+      "@lightway/core": ["packages/core/src/index.ts"],
+      "@lightway/http": ["packages/http/src/index.ts"],
+      "@lightway/definition-loader-json": [
+        "packages/definition-loader-json/src/index.ts"
+      ],
+      "@lightway/provider-openai": ["packages/provider-openai/src/index.ts"],
+      "@lightway/provider-bedrock": ["packages/provider-bedrock/src/index.ts"],
+      "@lightway/context-memory": ["packages/context-memory/src/index.ts"],
+      "@lightway/plugin-preprocess-common": [
+        "packages/plugin-preprocess-common/src/index.ts"
+      ],
+      "@lightway/plugin-postprocess-common": [
+        "packages/plugin-postprocess-common/src/index.ts"
+      ]
+    },
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "apps/**/*.ts",
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ]
+}

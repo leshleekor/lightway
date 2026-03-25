@@ -1,0 +1,13 @@
+{
+  "name": "@lightway/provider-bedrock",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.922.0",
+    "@lightway/core": "workspace:*"
+  }
+}

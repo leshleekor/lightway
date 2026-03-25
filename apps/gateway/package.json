@@ -1,0 +1,17 @@
+{
+  "name": "@lightway/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lightway/context-memory": "workspace:*",
+    "@lightway/core": "workspace:*",
+    "@lightway/definition-loader-json": "workspace:*",
+    "@lightway/http": "workspace:*",
+    "@lightway/plugin-postprocess-common": "workspace:*",
+    "@lightway/plugin-preprocess-common": "workspace:*",
+    "@lightway/provider-bedrock": "workspace:*",
+    "@lightway/provider-openai": "workspace:*",
+    "dotenv": "^17.2.3"
+  }
+}
