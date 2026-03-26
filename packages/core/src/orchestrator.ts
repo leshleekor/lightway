@@ -91,13 +91,6 @@ function estimateTextTokens(value: string): number {
   return Math.max(1, Math.ceil(value.length / 4));
 }
 
-function estimateMessagesTokens(messages: LightwayMessage[]): number {
-  return messages.reduce(
-    (total, message) => total + estimateTextTokens(contentToText(message.content)),
-    0
-  );
-}
-
 function trimMessagesTailFirst(
   messages: LightwayMessage[],
   maxTokens?: number
@@ -117,6 +110,7 @@ function trimMessagesTailFirst(
 
     const nextSize = estimateTextTokens(contentToText(message.content));
 
+    // Always preserve the latest turn and trim only older history.
     if (kept.length > 0 && total + nextSize > maxTokens) {
       break;
     }
@@ -166,13 +160,22 @@ function ragDocumentsToText(config: RagConfig, documents: RagDocument[]): string
     return "";
   }
 
-  return [
+  const defaultText = [
     `RAG source: ${config.name}`,
     ...documents.map((document, index) => {
       const source = document.source ? ` (${document.source})` : "";
       return `${index + 1}. ${document.content}${source}`;
     })
   ].join("\n");
+
+  if (!config.promptTemplate) {
+    return defaultText;
+  }
+
+  return config.promptTemplate
+    .replaceAll("{{name}}", config.name)
+    .replaceAll("{{documentCount}}", String(documents.length))
+    .replaceAll("{{documents}}", defaultText);
 }
 
 function findSavableUserMessage(messages: LightwayMessage[]): LightwayMessage | undefined {
@@ -335,6 +338,19 @@ function resolveExecutionOptions(
     throw new LightwayError(
       "UNSUPPORTED_FEATURE",
       "structuredOutput requires outputSchema in the definition"
+    );
+  }
+
+  if (
+    request.temperature !== undefined &&
+    (Number.isNaN(request.temperature) ||
+      request.temperature < 0 ||
+      request.temperature > 2)
+  ) {
+    throw new LightwayError(
+      "INVALID_INPUT",
+      "temperature must be between 0 and 2",
+      { field: "temperature" }
     );
   }
 

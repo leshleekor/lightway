@@ -72,4 +72,42 @@ describe("definition registry", () => {
       /DEFINITION_DUPLICATED/
     );
   });
+
+  it("allows temperature 0 and rag priority 0", async () => {
+    const registry = createLightwayRegistry();
+    registry.registerProvider(new MockProvider({ name: "openai" }));
+
+    const source = new InlineDefinitionSource([
+      {
+        name: "animal-profile",
+        provider: "openai",
+        model: "test-model",
+        systemPrompt: "You are helpful.",
+        inputSchema: { type: "string" },
+        rag: [
+          {
+            name: "knowledge",
+            retriever: "missing-retriever",
+            sourceType: "custom",
+            priority: 0
+          }
+        ],
+        executionOptions: {
+          temperature: 0
+        }
+      }
+    ]);
+
+    const definitionRegistry = createDefinitionRegistry();
+    await expect(definitionRegistry.load(source, registry)).resolves.toBeUndefined();
+  });
+
+  it("rejects duplicate provider registration", () => {
+    const registry = createLightwayRegistry();
+    registry.registerProvider(new MockProvider({ name: "openai" }));
+
+    expect(() =>
+      registry.registerProvider(new MockProvider({ name: "openai" }))
+    ).toThrow(/Duplicate provider registration/);
+  });
 });

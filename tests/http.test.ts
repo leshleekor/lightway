@@ -85,11 +85,69 @@ describe("http gateway", () => {
         definitionName: "animal-pedia",
         input: {
           question: "Tell me about otters"
-        }
+        },
+        temperature: 0
       }
     });
     expect(execute.statusCode).toBe(200);
     expect(execute.json().output).toBe("ok");
+
+    await app.close();
+  });
+
+  it("returns requestId on invalid input errors", async () => {
+    const registry = createLightwayRegistry();
+    registry.registerProvider(new MockProvider({ name: "openai" }));
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "animal-pedia",
+          provider: "openai",
+          model: "test-model",
+          systemPrompt: "You are helpful.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              question: { type: "string" }
+            },
+            required: ["question"],
+            additionalProperties: false
+          }
+        }
+      ]),
+      registry
+    );
+
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry
+    });
+
+    const app = await createGatewayServer({
+      registry,
+      definitionRegistry,
+      orchestrator,
+      authToken: "secret-token"
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/execute",
+      headers: {
+        authorization: "Bearer secret-token",
+        "content-type": "application/json"
+      },
+      payload: {
+        definitionName: "animal-pedia",
+        input: {}
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().requestId).toBeTruthy();
+    expect(response.json().error.code).toBe("INVALID_INPUT");
 
     await app.close();
   });

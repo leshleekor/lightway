@@ -12,6 +12,14 @@ interface StoredConversation {
 
 export class InMemoryContextStore implements ContextStoreWithTtl {
   private readonly conversations = new Map<string, StoredConversation>();
+  private readonly cleanupTimer: NodeJS.Timeout;
+
+  constructor(cleanupIntervalMs = 60_000) {
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupExpired();
+    }, cleanupIntervalMs);
+    this.cleanupTimer.unref?.();
+  }
 
   async get(
     contextId: string,
@@ -60,5 +68,14 @@ export class InMemoryContextStore implements ContextStoreWithTtl {
       messages: entry.messages,
       expiresAt: Date.now() + ttlSeconds * 1_000
     });
+  }
+
+  private cleanupExpired(): void {
+    const now = Date.now();
+    for (const [contextId, conversation] of this.conversations.entries()) {
+      if (conversation.expiresAt && conversation.expiresAt <= now) {
+        this.conversations.delete(contextId);
+      }
+    }
   }
 }

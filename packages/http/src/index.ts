@@ -22,7 +22,7 @@ const executeRequestSchema = z.object({
   structuredOutput: z.boolean().optional(),
   stream: z.boolean().optional(),
   timeoutMs: z.number().int().positive().optional(),
-  temperature: z.number().positive().optional(),
+  temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().optional(),
   toolCalling: z.array(z.string()).optional(),
   metadata: z
@@ -46,6 +46,7 @@ export interface CreateGatewayServerOptions {
   authToken?: string;
   maxRequestBytes?: number;
   bootIssues?: string[];
+  logger?: boolean;
 }
 
 function getProviderStatus(registry: LightwayRegistry, providerName: string) {
@@ -173,7 +174,8 @@ export async function createGatewayServer(
 ): Promise<FastifyInstance> {
   const app = Fastify({
     bodyLimit: options.maxRequestBytes ?? 1_048_576,
-    genReqId: () => randomUUID()
+    genReqId: () => randomUUID(),
+    logger: options.logger ?? false
   });
 
   app.addHook("preHandler", async (request) => {
@@ -188,6 +190,14 @@ export async function createGatewayServer(
   });
 
   app.setErrorHandler((error, request, reply) => {
+    request.log.error(
+      {
+        err: error,
+        requestId: request.id
+      },
+      "request failed"
+    );
+
     let lightwayError: LightwayError;
 
     if (isLightwayError(error)) {

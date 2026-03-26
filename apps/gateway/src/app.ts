@@ -43,8 +43,10 @@ export async function createGatewayApplication(config: GatewayAppConfig = {}) {
     directory: definitionsDir
   });
 
+  let definitionsLoaded = false;
   try {
     await definitionRegistry.load(source, registry);
+    definitionsLoaded = true;
   } catch (error) {
     bootIssues.push(
       `DEFINITION_LOAD_FAILED:${error instanceof Error ? error.message : "unknown"}`
@@ -59,7 +61,7 @@ export async function createGatewayApplication(config: GatewayAppConfig = {}) {
       Number(process.env.LIGHTWAY_DEFAULT_TIMEOUT_MS ?? 30_000)
   });
 
-  return createGatewayServer({
+  const app = await createGatewayServer({
     registry,
     definitionRegistry,
     orchestrator,
@@ -67,6 +69,27 @@ export async function createGatewayApplication(config: GatewayAppConfig = {}) {
     maxRequestBytes:
       config.maxRequestBytes ??
       Number(process.env.LIGHTWAY_MAX_REQUEST_BYTES ?? 1_048_576),
-    bootIssues
+    bootIssues,
+    logger: true
   });
+
+  if (definitionsLoaded) {
+    app.log.info(
+      {
+        definitions: definitionRegistry.list().map((definition) => definition.name)
+      },
+      "definitions loaded"
+    );
+  }
+
+  if (bootIssues.length > 0) {
+    app.log.warn(
+      {
+        bootIssues
+      },
+      "gateway started with boot issues"
+    );
+  }
+
+  return app;
 }

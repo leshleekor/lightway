@@ -181,6 +181,237 @@ describe("execute orchestrator", () => {
     );
   });
 
+  it("returns STRUCTURED_OUTPUT_VALIDATION_FAILED after the retry also fails", async () => {
+    const provider = new MockProvider({
+      name: "openai",
+      onGenerate: async () => ({
+        rawText: "{\"name\":\"otter\"}"
+      })
+    });
+
+    const registry = createLightwayRegistry();
+    registry.registerProvider(provider);
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "animal-profile",
+          provider: "openai",
+          model: "test-model",
+          systemPrompt: "Return JSON only.",
+          inputSchema: { type: "string" },
+          outputSchema: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              summary: { type: "string" }
+            },
+            required: ["name", "summary"],
+            additionalProperties: false
+          }
+        }
+      ]),
+      registry
+    );
+
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry
+    });
+
+    await expect(
+      orchestrator.execute(
+        {
+          definitionName: "animal-profile",
+          input: "otter"
+        },
+        {
+          requestId: "req-structured-fail"
+        }
+      )
+    ).rejects.toMatchObject({
+      code: "STRUCTURED_OUTPUT_VALIDATION_FAILED"
+    });
+  });
+
+  it("emits an error event when the provider stream fails", async () => {
+    const provider = new MockProvider({
+      name: "openai",
+      onStream: async (_request, handler) => {
+        await handler({ type: "delta", text: "partial" });
+        await handler({
+          type: "error",
+          error: {
+            code: "upstream_error",
+            message: "stream exploded"
+          }
+        });
+      }
+    });
+
+    const registry = createLightwayRegistry();
+    registry.registerProvider(provider);
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "stream-demo",
+          provider: "openai",
+          model: "test-model",
+          systemPrompt: "Stream plain text.",
+          inputSchema: { type: "string" },
+          executionOptions: {
+            stream: true
+          }
+        }
+      ]),
+      registry
+    );
+
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry
+    });
+
+    const events: string[] = [];
+
+    await orchestrator.stream(
+      {
+        definitionName: "stream-demo",
+        input: "hello"
+      },
+      {
+        requestId: "req-stream-error",
+        onEvent: async (event) => {
+          events.push(event.type);
+        }
+      }
+    );
+
+    expect(events).toEqual(["start", "delta", "error"]);
+  });
+
+  it("returns PROVIDER_TIMEOUT when the provider exceeds timeoutMs", async () => {
+    const provider = new MockProvider({
+      name: "openai",
+      onGenerate: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        return {
+          rawText: "late"
+        };
+      }
+    });
+
+    const registry = createLightwayRegistry();
+    registry.registerProvider(provider);
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "timeout-demo",
+          provider: "openai",
+          model: "test-model",
+          systemPrompt: "Be quick.",
+          inputSchema: { type: "string" }
+        }
+      ]),
+      registry
+    );
+
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry
+    });
+
+    await expect(
+      orchestrator.execute(
+        {
+          definitionName: "timeout-demo",
+          input: "hello",
+          timeoutMs: 5
+        },
+        {
+          requestId: "req-timeout"
+        }
+      )
+    ).rejects.toMatchObject({
+      code: "PROVIDER_TIMEOUT"
+    });
+  });
+
+  it("runs rag retrievers and applies prompt templates", async () => {
+    const provider = new MockProvider({
+      name: "openai",
+      onGenerate: async (request) => {
+        expect(request.systemPrompt).toContain("Knowledge block");
+        expect(request.systemPrompt).toContain("sea otters use tools");
+        expect(request.systemPrompt).toContain("documents=1");
+        return {
+          rawText: "RAG answer"
+        };
+      }
+    });
+
+    const registry = createLightwayRegistry();
+    registry.registerProvider(provider);
+    registry.registerRagRetriever({
+      name: "knowledge-base",
+      async run() {
+        return {
+          name: "knowledge",
+          documents: [
+            {
+              id: "doc-1",
+              content: "sea otters use tools"
+            }
+          ]
+        };
+      }
+    });
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "rag-demo",
+          provider: "openai",
+          model: "test-model",
+          systemPrompt: "Use knowledge when available.",
+          inputSchema: { type: "string" },
+          rag: [
+            {
+              name: "knowledge",
+              retriever: "knowledge-base",
+              sourceType: "custom",
+              promptTemplate: "Knowledge block\n{{documents}}\ndocuments={{documentCount}}"
+            }
+          ]
+        }
+      ]),
+      registry
+    );
+
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry
+    });
+
+    const response = await orchestrator.execute(
+      {
+        definitionName: "rag-demo",
+        input: "otter"
+      },
+      {
+        requestId: "req-rag"
+      }
+    );
+
+    expect(response.output).toBe("RAG answer");
+  });
+
   it("streams deltas and completes context save after stream end", async () => {
     const provider = new MockProvider({
       name: "openai",

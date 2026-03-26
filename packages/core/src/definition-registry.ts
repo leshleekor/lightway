@@ -31,6 +31,29 @@ function validatePositiveNumber(
   }
 }
 
+function validateNonNegativeNumber(
+  value: unknown,
+  path: string,
+  errors: string[]
+): void {
+  if (value !== undefined && (typeof value !== "number" || Number.isNaN(value) || value < 0)) {
+    errors.push(`${path} must be a non-negative number`);
+  }
+}
+
+function validateTemperature(
+  value: unknown,
+  path: string,
+  errors: string[]
+): void {
+  if (
+    value !== undefined &&
+    (typeof value !== "number" || Number.isNaN(value) || value < 0 || value > 2)
+  ) {
+    errors.push(`${path} must be a number between 0 and 2`);
+  }
+}
+
 function validateOptionalBoolean(
   value: unknown,
   path: string,
@@ -71,7 +94,7 @@ function validateRagConfig(config: RagConfig, path: string, errors: string[]): v
     errors.push(`${path}.dedupeStrategy must be id, content, or none`);
   }
 
-  validatePositiveNumber(config.priority, `${path}.priority`, errors);
+  validateNonNegativeNumber(config.priority, `${path}.priority`, errors);
   validatePositiveNumber(config.topK, `${path}.topK`, errors);
 
   if (
@@ -184,7 +207,7 @@ function validateDefinitionStructure(definition: AIDefinition): void {
         "executionOptions.timeoutMs",
         errors
       );
-      validatePositiveNumber(
+      validateTemperature(
         definition.executionOptions.temperature,
         "executionOptions.temperature",
         errors
