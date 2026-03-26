@@ -1,5 +1,5 @@
 {
-  "name": "@lightway/plugin-postprocess-common",
+  "name": "@lightway/provider-claude",
   "version": "0.1.0",
   "private": true,
   "type": "module",

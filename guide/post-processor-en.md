@@ -128,5 +128,5 @@ Add names to the definition `postprocess` array. They run in array order.
 
 ## Reference Implementation
 
-- Built-in implementation: [`packages/plugin-postprocess-common/src/index.ts`](../packages/plugin-postprocess-common/src/index.ts)
+- Built-in implementation: [`packages/postprocess-common/src/index.ts`](../packages/postprocess-common/src/index.ts)
 - Registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

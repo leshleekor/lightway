@@ -128,5 +128,5 @@ Definition JSON의 `postprocess` 배열에 이름을 추가하면 순서대로 �
 
 ## 참고 구현
 
-- 기본 구현: [`packages/plugin-postprocess-common/src/index.ts`](../packages/plugin-postprocess-common/src/index.ts)
+- 기본 구현: [`packages/postprocess-common/src/index.ts`](../packages/postprocess-common/src/index.ts)
 - 등록 예시: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

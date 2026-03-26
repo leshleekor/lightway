@@ -254,11 +254,15 @@ export async function createGatewayServer(
   });
 
   app.get("/v1/providers", async () => ({
-    items: options.registry.listProviders().map((provider) => ({
-      name: provider.name,
-      status: provider.getStatus?.().status ?? "ready",
-      issue: provider.getStatus?.().issue
-    }))
+    items: options.registry.listProviders().map((provider) => {
+      const status = provider.getStatus?.() ?? { status: "ready" as const };
+
+      return {
+        name: provider.name,
+        status: status.status,
+        issue: status.issue
+      };
+    })
   }));
 
   app.get("/v1/capabilities", async () => ({

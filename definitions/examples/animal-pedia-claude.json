@@ -1,0 +1,31 @@
+{
+  "name": "animal-pedia-claude",
+  "description": "Example Claude-backed definition. Replace the model with one enabled in your Anthropic account if needed.",
+  "provider": "claude",
+  "model": "claude-3-5-sonnet-latest",
+  "systemPrompt": "You are an animal encyclopedia assistant. Answer accurately and clearly.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "The user question about an animal."
+      }
+    },
+    "required": ["question"],
+    "additionalProperties": false
+  },
+  "preprocess": ["trim-string-input"],
+  "postprocess": ["trim-text-output"],
+  "executionOptions": {
+    "context": true,
+    "contextStore": "memory",
+    "contextWindow": {
+      "maxMessages": 20,
+      "ttlSeconds": 86400
+    },
+    "stream": false,
+    "timeoutMs": 30000,
+    "temperature": 0.4
+  }
+}

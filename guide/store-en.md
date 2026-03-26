@@ -165,6 +165,6 @@ If the definition does not specify `contextStore`, the registry default store is
 
 ## Reference Implementation
 
-- In-memory store: [`packages/context-memory/src/index.ts`](../packages/context-memory/src/index.ts)
+- In-memory store: [`packages/store-in-memory/src/index.ts`](../packages/store-in-memory/src/index.ts)
 - Registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)
 - Definition example: [`definitions/animal-pedia.json`](../definitions/animal-pedia.json)

@@ -205,6 +205,24 @@ function buildAssistantMessage(result: LightwayResult): LightwayMessage {
   };
 }
 
+function mergeUsage(
+  current: LightwayResult["usage"],
+  incoming: NonNullable<LightwayResult["usage"]>
+): NonNullable<LightwayResult["usage"]> {
+  const inputTokens = incoming.inputTokens ?? current?.inputTokens;
+  const outputTokens = incoming.outputTokens ?? current?.outputTokens;
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens:
+      incoming.totalTokens ??
+      (inputTokens !== undefined && outputTokens !== undefined
+        ? inputTokens + outputTokens
+        : current?.totalTokens)
+  };
+}
+
 function parseStructuredOutput(
   response: ProviderResponse,
   outputSchema: SchemaLike<unknown>
@@ -1012,10 +1030,10 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
               }
 
               if (event.type === "usage") {
-                usage = event.usage;
+                usage = mergeUsage(usage, event.usage);
                 await options.onEvent({
                   type: "usage",
-                  data: event.usage
+                  data: usage
                 });
                 return;
               }

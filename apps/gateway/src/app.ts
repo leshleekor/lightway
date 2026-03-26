@@ -5,13 +5,14 @@ import {
   createExecuteOrchestrator,
   createLightwayRegistry
 } from "@lightway/core";
-import { InMemoryContextStore } from "@lightway/context-memory";
 import { JsonDefinitionSource } from "@lightway/definition-loader-json";
 import { createGatewayServer } from "@lightway/http";
-import { TrimTextOutputPostprocessor } from "@lightway/plugin-postprocess-common";
-import { TrimStringInputPreprocessor } from "@lightway/plugin-preprocess-common";
 import { BedrockProvider } from "@lightway/provider-bedrock";
+import { ClaudeProvider } from "@lightway/provider-claude";
 import { OpenAIProvider } from "@lightway/provider-openai";
+import { InMemoryContextStore } from "@lightway/store-in-memory";
+import { TrimTextOutputPostprocessor } from "@lightway/postprocess-common";
+import { TrimStringInputPreprocessor } from "@lightway/preprocess-common";
 
 export interface GatewayAppConfig {
   authToken?: string;
@@ -27,6 +28,7 @@ export async function createGatewayApplication(config: GatewayAppConfig = {}) {
 
   registry.registerProvider(new OpenAIProvider());
   registry.registerProvider(new BedrockProvider());
+  registry.registerProvider(new ClaudeProvider());
   registry.registerContextStore("memory", new InMemoryContextStore());
   registry.setDefaultContextStore("memory");
   registry.registerPreprocessor(new TrimStringInputPreprocessor());

@@ -165,6 +165,6 @@ Store는 `executionOptions.contextStore`로 선택합니다.
 
 ## 참고 구현
 
-- 메모리 Store: [`packages/context-memory/src/index.ts`](../packages/context-memory/src/index.ts)
+- 메모리 Store: [`packages/store-in-memory/src/index.ts`](../packages/store-in-memory/src/index.ts)
 - 등록 예시: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)
 - Definition 예시: [`definitions/animal-pedia.json`](../definitions/animal-pedia.json)

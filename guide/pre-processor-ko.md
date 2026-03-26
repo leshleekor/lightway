@@ -148,5 +148,5 @@ Definition JSON의 `preprocess` 배열에 이름을 추가하면 순서대로 �
 
 ## 참고 구현
 
-- 기본 구현: [`packages/plugin-preprocess-common/src/index.ts`](../packages/plugin-preprocess-common/src/index.ts)
+- 기본 구현: [`packages/preprocess-common/src/index.ts`](../packages/preprocess-common/src/index.ts)
 - 등록 예시: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

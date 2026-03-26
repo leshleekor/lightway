@@ -218,4 +218,5 @@ The definition `provider` field must exactly match the provider `name`.
 
 - OpenAI provider: [`packages/provider-openai/src/index.ts`](../packages/provider-openai/src/index.ts)
 - Bedrock provider: [`packages/provider-bedrock/src/index.ts`](../packages/provider-bedrock/src/index.ts)
+- Claude provider: [`packages/provider-claude/src/index.ts`](../packages/provider-claude/src/index.ts)
 - Provider registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

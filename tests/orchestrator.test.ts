@@ -3,9 +3,9 @@ import {
   createExecuteOrchestrator,
   createLightwayRegistry
 } from "@lightway/core";
-import { InMemoryContextStore } from "@lightway/context-memory";
-import { TrimTextOutputPostprocessor } from "@lightway/plugin-postprocess-common";
-import { TrimStringInputPreprocessor } from "@lightway/plugin-preprocess-common";
+import { InMemoryContextStore } from "@lightway/store-in-memory";
+import { TrimTextOutputPostprocessor } from "@lightway/postprocess-common";
+import { TrimStringInputPreprocessor } from "@lightway/preprocess-common";
 import { describe, expect, it } from "vitest";
 import { InlineDefinitionSource, MockProvider } from "./helpers.js";
 
@@ -492,5 +492,91 @@ describe("execute orchestrator", () => {
     expect(contextId).toBeDefined();
     const storedMessages = await contextStore.get(contextId!, { limit: 10 });
     expect(storedMessages[1]?.content).toBe("Hello world");
+  });
+
+  it("merges streaming usage events instead of overwriting earlier token counts", async () => {
+    const provider = new MockProvider({
+      name: "claude",
+      onStream: async (_request, handler) => {
+        await handler({
+          type: "usage",
+          usage: {
+            inputTokens: 11
+          }
+        });
+        await handler({ type: "delta", text: "Hello" });
+        await handler({
+          type: "usage",
+          usage: {
+            outputTokens: 7
+          }
+        });
+        await handler({ type: "end", finishReason: "stop" });
+      }
+    });
+
+    const registry = createLightwayRegistry();
+    registry.registerProvider(provider);
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "claude-stream-demo",
+          provider: "claude",
+          model: "test-model",
+          systemPrompt: "Stream plain text.",
+          inputSchema: { type: "string" },
+          executionOptions: {
+            stream: true
+          }
+        }
+      ]),
+      registry
+    );
+
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry
+    });
+
+    const events: Array<{ type: string; data?: Record<string, unknown> }> = [];
+
+    await orchestrator.stream(
+      {
+        definitionName: "claude-stream-demo",
+        input: "hello"
+      },
+      {
+        requestId: "req-stream-usage-merge",
+        onEvent: async (event) => {
+          events.push({
+            type: event.type,
+            data: "data" in event ? event.data : undefined
+          });
+        }
+      }
+    );
+
+    const usageEvents = events.filter((event) => event.type === "usage");
+
+    expect(usageEvents).toEqual([
+      {
+        type: "usage",
+        data: {
+          inputTokens: 11,
+          outputTokens: undefined,
+          totalTokens: undefined
+        }
+      },
+      {
+        type: "usage",
+        data: {
+          inputTokens: 11,
+          outputTokens: 7,
+          totalTokens: 18
+        }
+      }
+    ]);
   });
 });

@@ -15,14 +15,17 @@ export default defineConfig({
       "@lightway/provider-bedrock": resolve(
         "packages/provider-bedrock/src/index.ts"
       ),
-      "@lightway/context-memory": resolve(
-        "packages/context-memory/src/index.ts"
+      "@lightway/provider-claude": resolve(
+        "packages/provider-claude/src/index.ts"
       ),
-      "@lightway/plugin-preprocess-common": resolve(
-        "packages/plugin-preprocess-common/src/index.ts"
+      "@lightway/store-in-memory": resolve(
+        "packages/store-in-memory/src/index.ts"
       ),
-      "@lightway/plugin-postprocess-common": resolve(
-        "packages/plugin-postprocess-common/src/index.ts"
+      "@lightway/preprocess-common": resolve(
+        "packages/preprocess-common/src/index.ts"
+      ),
+      "@lightway/postprocess-common": resolve(
+        "packages/postprocess-common/src/index.ts"
       )
     }
   },

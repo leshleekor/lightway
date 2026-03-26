@@ -219,4 +219,5 @@ Definition JSON의 `provider` 필드가 등록된 Provider의 `name`과 정확�
 
 - OpenAI Provider: [`packages/provider-openai/src/index.ts`](../packages/provider-openai/src/index.ts)
 - Bedrock Provider: [`packages/provider-bedrock/src/index.ts`](../packages/provider-bedrock/src/index.ts)
+- Claude Provider: [`packages/provider-claude/src/index.ts`](../packages/provider-claude/src/index.ts)
 - Provider 등록 예시: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

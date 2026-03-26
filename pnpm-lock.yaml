@@ -23,9 +23,6 @@ importers:
 
   apps/gateway:
     dependencies:
-      '@lightway/context-memory':
-        specifier: workspace:*
-        version: link:../../packages/context-memory
       '@lightway/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -35,27 +32,27 @@ importers:
       '@lightway/http':
         specifier: workspace:*
         version: link:../../packages/http
-      '@lightway/plugin-postprocess-common':
+      '@lightway/postprocess-common':
         specifier: workspace:*
-        version: link:../../packages/plugin-postprocess-common
-      '@lightway/plugin-preprocess-common':
+        version: link:../../packages/postprocess-common
+      '@lightway/preprocess-common':
         specifier: workspace:*
-        version: link:../../packages/plugin-preprocess-common
+        version: link:../../packages/preprocess-common
       '@lightway/provider-bedrock':
         specifier: workspace:*
         version: link:../../packages/provider-bedrock
+      '@lightway/provider-claude':
+        specifier: workspace:*
+        version: link:../../packages/provider-claude
       '@lightway/provider-openai':
         specifier: workspace:*
         version: link:../../packages/provider-openai
+      '@lightway/store-in-memory':
+        specifier: workspace:*
+        version: link:../../packages/store-in-memory
       dotenv:
         specifier: ^17.2.3
         version: 17.3.1
-
-  packages/context-memory:
-    dependencies:
-      '@lightway/core':
-        specifier: workspace:*
-        version: link:../core
 
   packages/core:
     dependencies:
@@ -84,13 +81,13 @@ importers:
         specifier: ^4.1.11
         version: 4.3.6
 
-  packages/plugin-postprocess-common:
+  packages/postprocess-common:
     dependencies:
       '@lightway/core':
         specifier: workspace:*
         version: link:../core
 
-  packages/plugin-preprocess-common:
+  packages/preprocess-common:
     dependencies:
       '@lightway/core':
         specifier: workspace:*
@@ -105,7 +102,19 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/provider-claude:
+    dependencies:
+      '@lightway/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/provider-openai:
+    dependencies:
+      '@lightway/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/store-in-memory:
     dependencies:
       '@lightway/core':
         specifier: workspace:*

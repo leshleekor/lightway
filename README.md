@@ -44,10 +44,28 @@ The repository now contains a runnable pnpm workspace with:
 - `packages/definition-loader-json`: file-based definition source
 - `packages/provider-openai`: OpenAI chat-completions adapter
 - `packages/provider-bedrock`: AWS Bedrock Converse adapter
-- `packages/context-memory`: in-memory context store
-- `packages/plugin-preprocess-common`: common preprocessors
-- `packages/plugin-postprocess-common`: common postprocessors
+- `packages/provider-claude`: Anthropic Claude Messages API adapter
+- `packages/store-in-memory`: in-memory context store
+- `packages/preprocess-common`: common preprocessors
+- `packages/postprocess-common`: common postprocessors
 - `definitions/`: runnable example definitions
+
+Claude definition example for manual adoption:
+
+- `definitions/examples/animal-pedia-claude.json`
+
+## Package Docs
+
+- [apps/gateway README](./apps/gateway/README.md)
+- [packages/core README](./packages/core/README.md)
+- [packages/http README](./packages/http/README.md)
+- [packages/definition-loader-json README](./packages/definition-loader-json/README.md)
+- [packages/provider-openai README](./packages/provider-openai/README.md)
+- [packages/provider-bedrock README](./packages/provider-bedrock/README.md)
+- [packages/provider-claude README](./packages/provider-claude/README.md)
+- [packages/store-in-memory README](./packages/store-in-memory/README.md)
+- [packages/preprocess-common README](./packages/preprocess-common/README.md)
+- [packages/postprocess-common README](./packages/postprocess-common/README.md)
 
 ## Custom Component Guide
 
@@ -64,8 +82,9 @@ Each guide is available in Korean and English.
 1. Copy `.env.example` to `.env`.
 2. Set `LIGHTWAY_AUTH_TOKEN`.
 3. Set `OPENAI_API_KEY` to use the included OpenAI definitions.
-4. Install dependencies with `corepack pnpm install`.
-5. Start the gateway with `corepack pnpm dev`.
+4. Set `ANTHROPIC_API_KEY` if you want to register and execute Claude-backed definitions.
+5. Install dependencies with `corepack pnpm install`.
+6. Start the gateway with `corepack pnpm dev`.
 
 Default server address: `http://localhost:3000`
 

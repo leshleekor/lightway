@@ -20,13 +20,10 @@
       ],
       "@lightway/provider-openai": ["packages/provider-openai/src/index.ts"],
       "@lightway/provider-bedrock": ["packages/provider-bedrock/src/index.ts"],
-      "@lightway/context-memory": ["packages/context-memory/src/index.ts"],
-      "@lightway/plugin-preprocess-common": [
-        "packages/plugin-preprocess-common/src/index.ts"
-      ],
-      "@lightway/plugin-postprocess-common": [
-        "packages/plugin-postprocess-common/src/index.ts"
-      ]
+      "@lightway/provider-claude": ["packages/provider-claude/src/index.ts"],
+      "@lightway/store-in-memory": ["packages/store-in-memory/src/index.ts"],
+      "@lightway/preprocess-common": ["packages/preprocess-common/src/index.ts"],
+      "@lightway/postprocess-common": ["packages/postprocess-common/src/index.ts"]
     },
     "types": ["node", "vitest/globals"]
   },

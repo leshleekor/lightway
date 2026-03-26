@@ -146,5 +146,5 @@ Add names to the definition `preprocess` array. They run in array order.
 
 ## Reference Implementation
 
-- Built-in implementation: [`packages/plugin-preprocess-common/src/index.ts`](../packages/plugin-preprocess-common/src/index.ts)
+- Built-in implementation: [`packages/preprocess-common/src/index.ts`](../packages/preprocess-common/src/index.ts)
 - Registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

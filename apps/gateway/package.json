@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@lightway/context-memory": "workspace:*",
     "@lightway/core": "workspace:*",
     "@lightway/definition-loader-json": "workspace:*",
     "@lightway/http": "workspace:*",
-    "@lightway/plugin-postprocess-common": "workspace:*",
-    "@lightway/plugin-preprocess-common": "workspace:*",
     "@lightway/provider-bedrock": "workspace:*",
+    "@lightway/provider-claude": "workspace:*",
     "@lightway/provider-openai": "workspace:*",
+    "@lightway/store-in-memory": "workspace:*",
+    "@lightway/postprocess-common": "workspace:*",
+    "@lightway/preprocess-common": "workspace:*",
     "dotenv": "^17.2.3"
   }
 }
