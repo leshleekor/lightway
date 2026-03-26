@@ -49,6 +49,16 @@ The repository now contains a runnable pnpm workspace with:
 - `packages/plugin-postprocess-common`: common postprocessors
 - `definitions/`: runnable example definitions
 
+## Custom Component Guide
+
+You can extend Lightway by adding your own provider, pre-processor, post-processor, and store implementation.
+Each guide is available in Korean and English.
+
+- Provider: [KO](./guide/provider-ko.md) | [EN](./guide/provider-en.md)
+- Pre-Processor: [KO](./guide/pre-processor-ko.md) | [EN](./guide/pre-processor-en.md)
+- Post-Processor: [KO](./guide/post-processor-ko.md) | [EN](./guide/post-processor-en.md)
+- Store: [KO](./guide/store-ko.md) | [EN](./guide/store-en.md)
+
 ## Quick Start
 
 1. Copy `.env.example` to `.env`.
