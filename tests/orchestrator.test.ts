@@ -1,7 +1,8 @@
 import {
   createDefinitionRegistry,
   createExecuteOrchestrator,
-  createLightwayRegistry
+  createLightwayRegistry,
+  type ExecutionHookEvent
 } from "@lightway/core";
 import { InMemoryContextStore } from "@lightway/store-in-memory";
 import { TrimTextOutputPostprocessor } from "@lightway/postprocess-common";
@@ -87,6 +88,146 @@ describe("execute orchestrator", () => {
     expect(storedMessages).toHaveLength(2);
     expect(String(storedMessages[0]?.content)).toContain("\"question\": \"otter facts\"");
     expect(storedMessages[1]?.content).toBe("Otters are playful semiaquatic mammals.");
+  });
+
+  it("awaits onExecutionEnd and emits a success execution event", async () => {
+    const provider = new MockProvider({
+      name: "openai",
+      onGenerate: async () => ({
+        rawText: "audit me",
+        finishReason: "stop",
+        usage: {
+          inputTokens: 3,
+          outputTokens: 2,
+          totalTokens: 5
+        },
+        metadata: {
+          upstreamRequestId: "up_123"
+        }
+      })
+    });
+
+    const registry = createLightwayRegistry();
+    registry.registerProvider(provider);
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "audit-demo",
+          provider: "openai",
+          model: "test-model",
+          systemPrompt: "Return text.",
+          inputSchema: { type: "string" }
+        }
+      ]),
+      registry
+    );
+
+    const events: ExecutionHookEvent[] = [];
+    let hookResolved = false;
+
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry,
+      onExecutionEnd: async (event) => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        hookResolved = true;
+        events.push(event);
+      }
+    });
+
+    const response = await orchestrator.execute(
+      {
+        definitionName: "audit-demo",
+        input: "hello"
+      },
+      {
+        requestId: "req-audit-success"
+      }
+    );
+
+    expect(hookResolved).toBe(true);
+    expect(response.output).toBe("audit me");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      requestId: "req-audit-success",
+      definitionName: "audit-demo",
+      provider: "openai",
+      model: "test-model",
+      status: "succeeded",
+      rawText: "audit me",
+      finishReason: "stop",
+      usage: {
+        inputTokens: 3,
+        outputTokens: 2,
+        totalTokens: 5
+      },
+      metadata: {
+        upstreamRequestId: "up_123"
+      }
+    });
+    expect(events[0]?.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("emits a failed execution event for invalid input", async () => {
+    const registry = createLightwayRegistry();
+    registry.registerProvider(new MockProvider({ name: "openai" }));
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "animal-pedia",
+          provider: "openai",
+          model: "test-model",
+          systemPrompt: "You are helpful.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              question: { type: "string" }
+            },
+            required: ["question"],
+            additionalProperties: false
+          }
+        }
+      ]),
+      registry
+    );
+
+    const events: ExecutionHookEvent[] = [];
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry,
+      onExecutionEnd: async (event) => {
+        events.push(event);
+      }
+    });
+
+    await expect(
+      orchestrator.execute(
+        {
+          definitionName: "animal-pedia",
+          input: {}
+        },
+        {
+          requestId: "req-invalid-input-audit"
+        }
+      )
+    ).rejects.toMatchObject({
+      code: "INVALID_INPUT"
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      requestId: "req-invalid-input-audit",
+      definitionName: "animal-pedia",
+      status: "failed",
+      error: {
+        code: "INVALID_INPUT",
+        stage: "input-validation"
+      }
+    });
   });
 
   it("retries once when structured output validation fails", async () => {
@@ -291,6 +432,77 @@ describe("execute orchestrator", () => {
     );
 
     expect(events).toEqual(["start", "delta", "error"]);
+  });
+
+  it("emits a failed execution event with partial rawText for streaming errors", async () => {
+    const provider = new MockProvider({
+      name: "openai",
+      onStream: async (_request, handler) => {
+        await handler({ type: "delta", text: "partial" });
+        await handler({
+          type: "error",
+          error: {
+            code: "upstream_error",
+            message: "stream exploded"
+          }
+        });
+      }
+    });
+
+    const registry = createLightwayRegistry();
+    registry.registerProvider(provider);
+
+    const definitionRegistry = createDefinitionRegistry();
+    await definitionRegistry.load(
+      new InlineDefinitionSource([
+        {
+          name: "stream-demo",
+          provider: "openai",
+          model: "test-model",
+          systemPrompt: "Stream plain text.",
+          inputSchema: { type: "string" },
+          executionOptions: {
+            stream: true
+          }
+        }
+      ]),
+      registry
+    );
+
+    const events: ExecutionHookEvent[] = [];
+    const orchestrator = createExecuteOrchestrator({
+      registry,
+      definitionRegistry,
+      onExecutionEnd: async (event) => {
+        events.push(event);
+      }
+    });
+
+    await orchestrator.stream(
+      {
+        definitionName: "stream-demo",
+        input: "hello"
+      },
+      {
+        requestId: "req-stream-audit-fail",
+        onEvent: async () => {}
+      }
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      requestId: "req-stream-audit-fail",
+      definitionName: "stream-demo",
+      provider: "openai",
+      model: "test-model",
+      status: "failed",
+      rawText: "partial",
+      error: {
+        code: "PROVIDER_EXECUTION_FAILED",
+        stage: "provider"
+      }
+    });
+    expect(events[0]?.output).toBeUndefined();
   });
 
   it("returns PROVIDER_TIMEOUT when the provider exceeds timeoutMs", async () => {

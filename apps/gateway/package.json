@@ -12,6 +12,7 @@
     "@lightway/provider-openai": "workspace:*",
     "@lightway/store-in-memory": "workspace:*",
     "@lightway/postprocess-common": "workspace:*",
+    "@lightway/postprocess-audit-log": "workspace:*",
     "@lightway/preprocess-common": "workspace:*",
     "dotenv": "^17.2.3"
   }
