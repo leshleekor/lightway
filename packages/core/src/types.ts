@@ -114,6 +114,47 @@ export interface LightwayResult<T = unknown> {
   metadata?: Record<string, unknown>;
 }
 
+export type ExecutionStatus = "succeeded" | "failed";
+
+export type ExecutionErrorStage =
+  | "provider"
+  | "preprocess"
+  | "postprocess"
+  | "structured-output"
+  | "context"
+  | "rag"
+  | "input-validation"
+  | "internal";
+
+export interface ExecutionHookEvent {
+  requestId: string;
+  definitionName: string;
+  provider?: string;
+  model?: string;
+  contextId?: string;
+  status: ExecutionStatus;
+  latencyMs: number;
+  finishReason?: string;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  rawText?: string;
+  output?: unknown;
+  error?: {
+    code: string;
+    message: string;
+    stage?: ExecutionErrorStage;
+    details?: Record<string, unknown>;
+  };
+  metadata?: Record<string, unknown>;
+}
+
+export type ExecutionHook = (
+  event: ExecutionHookEvent
+) => Promise<void> | void;
+
 export interface Preprocessor {
   name: string;
   run(context: LightwayContext): Promise<LightwayContext>;

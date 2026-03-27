@@ -11,6 +11,10 @@ import { BedrockProvider } from "@lightway/provider-bedrock";
 import { ClaudeProvider } from "@lightway/provider-claude";
 import { OpenAIProvider } from "@lightway/provider-openai";
 import { InMemoryContextStore } from "@lightway/store-in-memory";
+import {
+  ConsoleExecutionAuditSink,
+  createExecutionAuditHook
+} from "@lightway/postprocess-audit-log";
 import { TrimTextOutputPostprocessor } from "@lightway/postprocess-common";
 import { TrimStringInputPreprocessor } from "@lightway/preprocess-common";
 
@@ -60,7 +64,14 @@ export async function createGatewayApplication(config: GatewayAppConfig = {}) {
     definitionRegistry,
     defaultTimeoutMs:
       config.defaultTimeoutMs ??
-      Number(process.env.LIGHTWAY_DEFAULT_TIMEOUT_MS ?? 30_000)
+      Number(process.env.LIGHTWAY_DEFAULT_TIMEOUT_MS ?? 30_000),
+    onExecutionEnd: createExecutionAuditHook(
+      new ConsoleExecutionAuditSink(),
+      {
+        captureResponseBody: "full",
+        failOpen: true
+      }
+    )
   });
 
   const app = await createGatewayServer({

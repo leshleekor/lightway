@@ -26,6 +26,9 @@ export default defineConfig({
       ),
       "@lightway/postprocess-common": resolve(
         "packages/postprocess-common/src/index.ts"
+      ),
+      "@lightway/postprocess-audit-log": resolve(
+        "packages/postprocess-audit-log/src/index.ts"
       )
     }
   },

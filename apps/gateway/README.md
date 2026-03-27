@@ -29,6 +29,8 @@ Optional:
 
 Provider-specific environment variables are documented in each provider package README.
 
+Execution audit logs are enabled by default through the core `onExecutionEnd` hook and are written to stdout as JSON records.
+
 ## Default Bootstrap
 
 The gateway registers these packages by default:
@@ -39,6 +41,7 @@ The gateway registers these packages by default:
 - `@lightway/store-in-memory`
 - `@lightway/preprocess-common`
 - `@lightway/postprocess-common`
+- `@lightway/postprocess-audit-log` via `ConsoleExecutionAuditSink`
 
 ## Example
 

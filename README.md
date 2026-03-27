@@ -48,6 +48,7 @@ The repository now contains a runnable pnpm workspace with:
 - `packages/store-in-memory`: in-memory context store
 - `packages/preprocess-common`: common preprocessors
 - `packages/postprocess-common`: common postprocessors
+- `packages/postprocess-audit-log`: execution audit log hook, sink, and standalone postprocessor
 - `definitions/`: runnable example definitions
 
 Claude definition example for manual adoption:
@@ -66,6 +67,7 @@ Claude definition example for manual adoption:
 - [packages/store-in-memory README](./packages/store-in-memory/README.md)
 - [packages/preprocess-common README](./packages/preprocess-common/README.md)
 - [packages/postprocess-common README](./packages/postprocess-common/README.md)
+- [packages/postprocess-audit-log README](./packages/postprocess-audit-log/README.md)
 
 ## Custom Component Guide
 
