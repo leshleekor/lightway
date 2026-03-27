@@ -32,6 +32,9 @@ importers:
       '@lightway/http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@lightway/postprocess-audit-log':
+        specifier: workspace:*
+        version: link:../../packages/postprocess-audit-log
       '@lightway/postprocess-common':
         specifier: workspace:*
         version: link:../../packages/postprocess-common
@@ -80,6 +83,12 @@ importers:
       zod:
         specifier: ^4.1.11
         version: 4.3.6
+
+  packages/postprocess-audit-log:
+    dependencies:
+      '@lightway/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/postprocess-common:
     dependencies:
