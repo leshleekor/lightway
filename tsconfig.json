@@ -23,7 +23,10 @@
       "@lightway/provider-claude": ["packages/provider-claude/src/index.ts"],
       "@lightway/store-in-memory": ["packages/store-in-memory/src/index.ts"],
       "@lightway/preprocess-common": ["packages/preprocess-common/src/index.ts"],
-      "@lightway/postprocess-common": ["packages/postprocess-common/src/index.ts"]
+      "@lightway/postprocess-common": ["packages/postprocess-common/src/index.ts"],
+      "@lightway/postprocess-audit-log": [
+        "packages/postprocess-audit-log/src/index.ts"
+      ]
     },
     "types": ["node", "vitest/globals"]
   },

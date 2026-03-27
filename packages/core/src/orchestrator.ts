@@ -6,6 +6,9 @@ import type {
   ContextStore,
   ContextStoreWithTtl,
   DefinitionRegistry,
+  ExecutionErrorStage,
+  ExecutionHook,
+  ExecutionHookEvent,
   ExecuteOrchestrator,
   ExecuteRequest,
   ExecuteResponse,
@@ -27,6 +30,7 @@ interface CreateExecuteOrchestratorOptions {
   registry: LightwayRegistry;
   definitionRegistry: DefinitionRegistry;
   defaultTimeoutMs?: number;
+  onExecutionEnd?: ExecutionHook;
 }
 
 interface ResolvedExecutionOptions {
@@ -330,6 +334,101 @@ function normalizeProviderError(error: unknown): never {
   throw new LightwayError("PROVIDER_EXECUTION_FAILED", "Upstream provider request failed", {
     cause: error instanceof Error ? error.message : "unknown"
   });
+}
+
+function toLightwayError(error: unknown): LightwayError {
+  if (isLightwayError(error)) {
+    return error;
+  }
+
+  return new LightwayError("INTERNAL_ERROR", "Unexpected execution failure", {
+    cause: error instanceof Error ? error.message : "unknown"
+  });
+}
+
+function isExecutionAuditSinkFailure(error: unknown): boolean {
+  return isLightwayError(error) && error.code === "EXECUTION_AUDIT_SINK_FAILED";
+}
+
+function mapErrorStage(error: LightwayError): ExecutionErrorStage {
+  switch (error.code) {
+    case "PROVIDER_EXECUTION_FAILED":
+    case "PROVIDER_TIMEOUT":
+    case "PROVIDER_CAPABILITY_NOT_SUPPORTED":
+    case "PROVIDER_NOT_FOUND":
+      return "provider";
+    case "PREPROCESS_FAILED":
+    case "PREPROCESSOR_NOT_FOUND":
+      return "preprocess";
+    case "POSTPROCESS_FAILED":
+    case "POSTPROCESSOR_NOT_FOUND":
+    case "EXECUTION_AUDIT_SINK_FAILED":
+      return "postprocess";
+    case "STRUCTURED_OUTPUT_VALIDATION_FAILED":
+      return "structured-output";
+    case "CONTEXT_LOAD_FAILED":
+    case "CONTEXT_SAVE_FAILED":
+    case "CONTEXT_STORE_NOT_FOUND":
+      return "context";
+    case "RAG_EXECUTION_FAILED":
+    case "RAG_RETRIEVER_NOT_FOUND":
+      return "rag";
+    case "INVALID_INPUT":
+    case "DEFINITION_NOT_FOUND":
+      return "input-validation";
+    default:
+      return "internal";
+  }
+}
+
+function buildFailureExecutionEvent(
+  request: ExecuteRequest,
+  requestId: string,
+  startedAt: number,
+  error: LightwayError,
+  prepared?: PreparedExecution,
+  result?: LightwayResult
+): ExecutionHookEvent {
+  return {
+    requestId,
+    definitionName: prepared?.definition.name ?? request.definitionName,
+    provider: prepared?.provider.name,
+    model: prepared?.definition.model,
+    contextId: prepared?.contextId ?? request.contextId,
+    status: "failed",
+    latencyMs: Date.now() - startedAt,
+    finishReason: result?.finishReason,
+    usage: result?.usage,
+    rawText: result?.rawText,
+    output: result?.output,
+    error: {
+      code: error.code,
+      message: error.message,
+      stage: mapErrorStage(error),
+      details: error.details
+    },
+    metadata: result?.metadata
+  };
+}
+
+function buildSuccessExecutionEvent(
+  prepared: PreparedExecution,
+  result: LightwayResult
+): ExecutionHookEvent {
+  return {
+    requestId: prepared.requestId,
+    definitionName: prepared.definition.name,
+    provider: prepared.provider.name,
+    model: prepared.definition.model,
+    contextId: prepared.contextId,
+    status: "succeeded",
+    latencyMs: Date.now() - prepared.startedAt,
+    finishReason: result.finishReason,
+    usage: result.usage,
+    rawText: result.rawText,
+    output: result.output,
+    metadata: result.metadata
+  };
 }
 
 function resolveExecutionOptions(
@@ -681,7 +780,8 @@ async function prepareExecution(
   definitionRegistry: DefinitionRegistry,
   request: ExecuteRequest,
   requestId: string,
-  defaultTimeoutMs: number
+  defaultTimeoutMs: number,
+  startedAt: number
 ): Promise<PreparedExecution> {
   const definition = definitionRegistry.get(request.definitionName);
   if (!definition) {
@@ -768,7 +868,9 @@ async function prepareExecution(
     messages: [...history, userMessage],
     ragArtifacts: [],
     metadata: {
-      ...(request.metadata ?? {})
+      ...(request.metadata ?? {}),
+      lightwayRequestId: requestId,
+      lightwayStartedAt: startedAt
     }
   };
 
@@ -815,7 +917,7 @@ async function prepareExecution(
     contextStore,
     effective,
     saveUserMessage: findSavableUserMessage(merged.messages),
-    startedAt: Date.now()
+    startedAt
   };
 }
 
@@ -823,93 +925,134 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
   private readonly registry: LightwayRegistry;
   private readonly definitionRegistry: DefinitionRegistry;
   private readonly defaultTimeoutMs: number;
+  private readonly onExecutionEnd?: ExecutionHook;
 
   constructor(options: CreateExecuteOrchestratorOptions) {
     this.registry = options.registry;
     this.definitionRegistry = options.definitionRegistry;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
+    this.onExecutionEnd = options.onExecutionEnd;
   }
 
   async execute(
     request: ExecuteRequest,
     options?: { requestId?: string }
   ): Promise<ExecuteResponse> {
-    const prepared = await prepareExecution(
-      this.registry,
-      this.definitionRegistry,
-      request,
-      options?.requestId ?? randomUUID(),
-      this.defaultTimeoutMs
-    );
+    const requestId = options?.requestId ?? randomUUID();
+    const startedAt = Date.now();
+    let prepared: PreparedExecution | undefined;
+    let result: LightwayResult | undefined;
 
-    if (prepared.effective.stream) {
-      throw new LightwayError(
-        "UNSUPPORTED_FEATURE",
-        "Use the streaming API path for stream=true requests"
+    try {
+      prepared = await prepareExecution(
+        this.registry,
+        this.definitionRegistry,
+        request,
+        requestId,
+        this.defaultTimeoutMs,
+        startedAt
       );
-    }
+      const preparedExecution = prepared;
 
-    let response: ProviderResponse & { output?: unknown };
-
-    if (prepared.effective.structuredOutput && prepared.definition.outputSchema) {
-      response = await resolveStructuredResponse(
-        prepared.provider,
-        prepared.providerRequest,
-        prepared.effective.timeoutMs,
-        prepared.definition.outputSchema
-      );
-    } else {
-      try {
-        response = await withProviderTimeout(prepared.effective.timeoutMs, (signal) =>
-          prepared.provider.generate({
-            ...prepared.providerRequest,
-            abortSignal: signal
-          })
+      if (preparedExecution.effective.stream) {
+        throw new LightwayError(
+          "UNSUPPORTED_FEATURE",
+          "Use the streaming API path for stream=true requests"
         );
-      } catch (error) {
-        normalizeProviderError(error);
       }
-    }
 
-    let result: LightwayResult = {
-      rawText: response.rawText,
-      output: response.output,
-      provider: prepared.provider.name,
-      model: prepared.definition.model,
-      finishReason: response.finishReason,
-      usage: response.usage,
-      metadata: response.metadata
-    };
+      let response: ProviderResponse & { output?: unknown };
 
-    result = await runPostprocessors(
-      this.registry,
-      prepared.definition,
-      result,
-      prepared.context
-    );
+      if (
+        preparedExecution.effective.structuredOutput &&
+        preparedExecution.definition.outputSchema
+      ) {
+        response = await resolveStructuredResponse(
+          preparedExecution.provider,
+          preparedExecution.providerRequest,
+          preparedExecution.effective.timeoutMs,
+          preparedExecution.definition.outputSchema
+        );
+      } else {
+        try {
+          response = await withProviderTimeout(preparedExecution.effective.timeoutMs, (signal) =>
+            preparedExecution.provider.generate({
+              ...preparedExecution.providerRequest,
+              abortSignal: signal
+            })
+          );
+        } catch (error) {
+          normalizeProviderError(error);
+        }
+      }
 
-    if (prepared.contextEnabled && prepared.contextStore && prepared.contextId) {
-      await saveContextMessages(
-        prepared.contextStore,
-        prepared.contextId,
-        prepared.saveUserMessage,
-        result
+      result = {
+        rawText: response.rawText,
+        output: response.output,
+        provider: preparedExecution.provider.name,
+        model: preparedExecution.definition.model,
+        finishReason: response.finishReason,
+        usage: response.usage,
+        metadata: response.metadata
+      };
+
+      result = await runPostprocessors(
+        this.registry,
+        preparedExecution.definition,
+        result,
+        preparedExecution.context
       );
-    }
 
-    return {
-      requestId: prepared.requestId,
-      definitionName: prepared.definition.name,
-      contextId: prepared.contextId,
-      provider: prepared.provider.name,
-      model: prepared.definition.model,
-      output:
-        prepared.effective.structuredOutput
-          ? result.output
-          : (result.output ?? result.rawText),
-      usage: result.usage,
-      latencyMs: Date.now() - prepared.startedAt
-    };
+      if (
+        preparedExecution.contextEnabled &&
+        preparedExecution.contextStore &&
+        preparedExecution.contextId
+      ) {
+        await saveContextMessages(
+          preparedExecution.contextStore,
+          preparedExecution.contextId,
+          preparedExecution.saveUserMessage,
+          result
+        );
+      }
+
+      await this.onExecutionEnd?.(buildSuccessExecutionEvent(preparedExecution, result));
+
+      return {
+        requestId: preparedExecution.requestId,
+        definitionName: preparedExecution.definition.name,
+        contextId: preparedExecution.contextId,
+        provider: preparedExecution.provider.name,
+        model: preparedExecution.definition.model,
+        output:
+          preparedExecution.effective.structuredOutput
+            ? result.output
+            : (result.output ?? result.rawText),
+        usage: result.usage,
+        latencyMs: Date.now() - preparedExecution.startedAt
+      };
+    } catch (error) {
+      const lightwayError = toLightwayError(error);
+
+      if (!isExecutionAuditSinkFailure(lightwayError)) {
+        try {
+          await this.onExecutionEnd?.(
+            buildFailureExecutionEvent(
+              request,
+              requestId,
+              startedAt,
+              lightwayError,
+              prepared,
+              result
+            )
+          );
+        } catch {
+          // Preserve the original execution failure when failure audit logging also fails.
+        }
+      }
+
+      throw lightwayError;
+    }
   }
 
   async stream(
@@ -919,39 +1062,49 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
       onEvent: (event: GatewayStreamEvent) => Promise<void> | void;
     }
   ): Promise<void> {
+    const requestId = options.requestId ?? randomUUID();
+    const startedAt = Date.now();
+    let prepared: PreparedExecution | undefined;
+    let result: LightwayResult | undefined;
+
     try {
-      const prepared = await prepareExecution(
+      prepared = await prepareExecution(
         this.registry,
         this.definitionRegistry,
         request,
-        options.requestId ?? randomUUID(),
-        this.defaultTimeoutMs
+        requestId,
+        this.defaultTimeoutMs,
+        startedAt
       );
+      const preparedExecution = prepared;
 
       await options.onEvent({
         type: "start",
         data: {
-          requestId: prepared.requestId,
-          definitionName: prepared.definition.name,
-          contextId: prepared.contextId,
-          provider: prepared.provider.name,
-          model: prepared.definition.model
+          requestId: preparedExecution.requestId,
+          definitionName: preparedExecution.definition.name,
+          contextId: preparedExecution.contextId,
+          provider: preparedExecution.provider.name,
+          model: preparedExecution.definition.model
         }
       });
 
-      if (prepared.effective.structuredOutput && prepared.definition.outputSchema) {
+      if (
+        preparedExecution.effective.structuredOutput &&
+        preparedExecution.definition.outputSchema
+      ) {
         const response = await resolveStructuredResponse(
-          prepared.provider,
-          prepared.providerRequest,
-          prepared.effective.timeoutMs,
-          prepared.definition.outputSchema
+          preparedExecution.provider,
+          preparedExecution.providerRequest,
+          preparedExecution.effective.timeoutMs,
+          preparedExecution.definition.outputSchema
         );
 
-        let result: LightwayResult = {
+        result = {
           rawText: response.rawText,
           output: response.output,
-          provider: prepared.provider.name,
-          model: prepared.definition.model,
+          provider: preparedExecution.provider.name,
+          model: preparedExecution.definition.model,
           finishReason: response.finishReason,
           usage: response.usage,
           metadata: response.metadata
@@ -959,9 +1112,9 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
 
         result = await runPostprocessors(
           this.registry,
-          prepared.definition,
+          preparedExecution.definition,
           result,
-          prepared.context
+          preparedExecution.context
         );
 
         if (result.usage) {
@@ -971,14 +1124,20 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
           });
         }
 
-        if (prepared.contextEnabled && prepared.contextStore && prepared.contextId) {
+        if (
+          preparedExecution.contextEnabled &&
+          preparedExecution.contextStore &&
+          preparedExecution.contextId
+        ) {
           await saveContextMessages(
-            prepared.contextStore,
-            prepared.contextId,
-            prepared.saveUserMessage,
+            preparedExecution.contextStore,
+            preparedExecution.contextId,
+            preparedExecution.saveUserMessage,
             result
           );
         }
+
+        await this.onExecutionEnd?.(buildSuccessExecutionEvent(preparedExecution, result));
 
         await options.onEvent({
           type: "output",
@@ -991,35 +1150,51 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
           type: "end",
           data: {
             finishReason: result.finishReason,
-            latencyMs: Date.now() - prepared.startedAt,
-            contextId: prepared.contextId
+            latencyMs: Date.now() - preparedExecution.startedAt,
+            contextId: preparedExecution.contextId
           }
         });
         return;
       }
 
-      if (!prepared.provider.stream || !prepared.provider.supports("streaming")) {
+      if (
+        !preparedExecution.provider.stream ||
+        !preparedExecution.provider.supports("streaming")
+      ) {
         throw new LightwayError(
           "PROVIDER_CAPABILITY_NOT_SUPPORTED",
           "Provider does not support streaming",
-          { provider: prepared.provider.name }
+          { provider: preparedExecution.provider.name }
         );
       }
 
       let rawText = "";
       let usage: LightwayResult["usage"];
       let finishReason: string | undefined;
+      let metadata: Record<string, unknown> | undefined;
+      let streamFailure: LightwayError | undefined;
+      let streamResult: LightwayResult = {
+        rawText,
+        provider: preparedExecution.provider.name,
+        model: preparedExecution.definition.model
+      };
+      result = streamResult;
 
       try {
-        await withProviderTimeout(prepared.effective.timeoutMs, (signal) =>
-          prepared.provider.stream!(
+        await withProviderTimeout(preparedExecution.effective.timeoutMs, (signal) =>
+          preparedExecution.provider.stream!(
             {
-              ...prepared.providerRequest,
+              ...preparedExecution.providerRequest,
               abortSignal: signal
             },
             async (event) => {
               if (event.type === "delta") {
                 rawText += event.text;
+                streamResult = {
+                  ...streamResult,
+                  rawText
+                };
+                result = streamResult;
                 await options.onEvent({
                   type: "delta",
                   data: {
@@ -1031,6 +1206,11 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
 
               if (event.type === "usage") {
                 usage = mergeUsage(usage, event.usage);
+                streamResult = {
+                  ...streamResult,
+                  usage
+                };
+                result = streamResult;
                 await options.onEvent({
                   type: "usage",
                   data: usage
@@ -1040,17 +1220,41 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
 
               if (event.type === "end") {
                 finishReason = event.finishReason;
+                metadata = {
+                  ...(metadata ?? {}),
+                  ...(event.metadata ?? {})
+                };
+                streamResult = {
+                  ...streamResult,
+                  finishReason,
+                  metadata
+                };
+                result = streamResult;
+                return;
+              }
+
+              if (event.type === "start") {
+                metadata = {
+                  ...(metadata ?? {}),
+                  ...(event.metadata ?? {})
+                };
+                streamResult = {
+                  ...streamResult,
+                  metadata
+                };
+                result = streamResult;
                 return;
               }
 
               if (event.type === "error") {
-                throw new LightwayError(
+                streamFailure = new LightwayError(
                   "PROVIDER_EXECUTION_FAILED",
                   event.error.message,
                   {
                     code: event.error.code
                   }
                 );
+                throw streamFailure;
               }
             }
           )
@@ -1059,29 +1263,40 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
         normalizeProviderError(error);
       }
 
-      let result: LightwayResult = {
+      if (streamFailure) {
+        throw streamFailure;
+      }
+
+      streamResult = {
+        ...streamResult,
         rawText,
-        provider: prepared.provider.name,
-        model: prepared.definition.model,
         finishReason,
-        usage
+        usage,
+        metadata
       };
+      result = streamResult;
 
       result = await runPostprocessors(
         this.registry,
-        prepared.definition,
+        preparedExecution.definition,
         result,
-        prepared.context
+        preparedExecution.context
       );
 
-      if (prepared.contextEnabled && prepared.contextStore && prepared.contextId) {
+      if (
+        preparedExecution.contextEnabled &&
+        preparedExecution.contextStore &&
+        preparedExecution.contextId
+      ) {
         await saveContextMessages(
-          prepared.contextStore,
-          prepared.contextId,
-          prepared.saveUserMessage,
+          preparedExecution.contextStore,
+          preparedExecution.contextId,
+          preparedExecution.saveUserMessage,
           result
         );
       }
+
+      await this.onExecutionEnd?.(buildSuccessExecutionEvent(preparedExecution, result));
 
       if (result.output !== undefined || result.rawText !== rawText) {
         await options.onEvent({
@@ -1096,16 +1311,29 @@ class ExecuteOrchestratorImpl implements ExecuteOrchestrator {
         type: "end",
         data: {
           finishReason: result.finishReason,
-          latencyMs: Date.now() - prepared.startedAt,
-          contextId: prepared.contextId
+          latencyMs: Date.now() - preparedExecution.startedAt,
+          contextId: preparedExecution.contextId
         }
       });
     } catch (error) {
-      const lightwayError = isLightwayError(error)
-        ? error
-        : new LightwayError("INTERNAL_ERROR", "Unexpected execution failure", {
-            cause: error instanceof Error ? error.message : "unknown"
-          });
+      const lightwayError = toLightwayError(error);
+
+      if (!isExecutionAuditSinkFailure(lightwayError)) {
+        try {
+          await this.onExecutionEnd?.(
+            buildFailureExecutionEvent(
+              request,
+              requestId,
+              startedAt,
+              lightwayError,
+              prepared,
+              result
+            )
+          );
+        } catch {
+          // Preserve the original stream failure when failure audit logging also fails.
+        }
+      }
 
       await options.onEvent({
         type: "error",
