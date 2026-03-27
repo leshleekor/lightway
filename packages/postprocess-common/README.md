@@ -1,31 +1,7 @@
 # @lightway/postprocess-common
 
-Built-in postprocessors for Lightway.
+Built-in postprocessors for the Lightway boilerplate.
 
-## Exports
-
-- `TrimTextOutputPostprocessor`
-
-## Workspace Path
-
-- `packages/postprocess-common`
-
-## Usage
-
-```ts
-import { TrimTextOutputPostprocessor } from "@lightway/postprocess-common";
-
-registry.registerPostprocessor(new TrimTextOutputPostprocessor());
-```
-
-## Environment Variables
-
-- Not required
-
-## Definition Example
-
-```json
-{
-  "postprocess": ["trim-text-output"]
-}
-```
+- 한국어 문서: [README-ko.md](./README-ko.md)
+- English docs: [README-en.md](./README-en.md)
+- Source entry: `src/index.ts`

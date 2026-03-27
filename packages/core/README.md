@@ -1,33 +1,7 @@
 # @lightway/core
 
-Core Lightway contracts and runtime primitives.
+Core contracts and composition APIs for the Lightway boilerplate.
 
-## Exports
-
-- registry factories
-- definition registry
-- execute orchestrator
-- schema helpers
-- shared types and error classes
-
-## Workspace Path
-
-- `packages/core`
-
-## Usage
-
-```ts
-import {
-  createDefinitionRegistry,
-  createExecuteOrchestrator,
-  createLightwayRegistry
-} from "@lightway/core";
-```
-
-## Environment Variables
-
-- Not required
-
-## Notes
-
-This package defines the contracts that all providers, stores, preprocessors, postprocessors, and retrievers implement.
+- 한국어 문서: [README-ko.md](./README-ko.md)
+- English docs: [README-en.md](./README-en.md)
+- Source entry: `src/index.ts`

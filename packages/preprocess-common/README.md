@@ -1,31 +1,7 @@
 # @lightway/preprocess-common
 
-Built-in preprocessors for Lightway.
+Built-in preprocessors for the Lightway boilerplate.
 
-## Exports
-
-- `TrimStringInputPreprocessor`
-
-## Workspace Path
-
-- `packages/preprocess-common`
-
-## Usage
-
-```ts
-import { TrimStringInputPreprocessor } from "@lightway/preprocess-common";
-
-registry.registerPreprocessor(new TrimStringInputPreprocessor());
-```
-
-## Environment Variables
-
-- Not required
-
-## Definition Example
-
-```json
-{
-  "preprocess": ["trim-string-input"]
-}
-```
+- 한국어 문서: [README-ko.md](./README-ko.md)
+- English docs: [README-en.md](./README-en.md)
+- Source entry: `src/index.ts`

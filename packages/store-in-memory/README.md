@@ -1,28 +1,7 @@
 # @lightway/store-in-memory
 
-In-memory `ContextStore` implementation for Lightway.
+In-memory context store for the Lightway boilerplate.
 
-## Exports
-
-- `InMemoryContextStore`
-
-## Workspace Path
-
-- `packages/store-in-memory`
-
-## Usage
-
-```ts
-import { InMemoryContextStore } from "@lightway/store-in-memory";
-
-registry.registerContextStore("memory", new InMemoryContextStore());
-registry.setDefaultContextStore("memory");
-```
-
-## Environment Variables
-
-- Not required
-
-## Notes
-
-This store is suitable for local development and tests. It is not intended for multi-instance shared persistence.
+- 한국어 문서: [README-ko.md](./README-ko.md)
+- English docs: [README-en.md](./README-en.md)
+- Source entry: `src/index.ts`
