@@ -2,62 +2,22 @@
 
 ## 개요
 
-Provider는 Lightway가 실제 AI 모델과 통신할 수 있게 해주는 어댑터입니다.
-새 Provider를 추가하려면 `@lightway/core`의 `ModelProvider` 인터페이스를 구현하고, 애플리케이션 부팅 시 Registry에 등록해야 합니다.
+Provider는 Lightway가 실제 AI 모델 backend를 호출할 수 있게 해주는 어댑터입니다.
 
-이 프로젝트에서 Provider는 다음 순서로 사용됩니다.
+이 모노레포에서 새 Provider를 추가하려면 단순히 `ModelProvider` 구현만으로 끝나지 않습니다.
 
-1. Definition이 참조하는 `provider` 이름을 확인합니다.
-2. Registry에서 같은 이름의 Provider를 찾습니다.
-3. Orchestrator가 `generate()` 또는 `stream()`을 호출합니다.
+1. 워크스페이스 패키지 생성
+2. Provider 클래스 구현
+3. 패키지 entrypoint export
+4. `apps/gateway` dependency 추가
+5. 루트 `tsconfig.json` path alias 추가
+6. bootstrap 등록
+7. 최소 테스트 추가
+8. `corepack pnpm validate` 실행
 
-`provider`가 등록되어 있지 않으면 Definition 로딩이 실패합니다.
+## 1. 워크스페이스 패키지 생성
 
-## 구현해야 하는 인터페이스
-
-핵심 계약은 [`packages/core/src/types.ts`](../packages/core/src/types.ts)에 정의되어 있습니다.
-
-```ts
-import type {
-  ModelProvider,
-  ProviderCapability,
-  ProviderRequest,
-  ProviderResponse,
-  ProviderRuntimeStatus,
-  ProviderStreamHandler
-} from "@lightway/core";
-
-export class ExampleProvider implements ModelProvider {
-  readonly name = "example";
-
-  supports(capability: ProviderCapability): boolean {
-    return capability === "text-generation";
-  }
-
-  getStatus(): ProviderRuntimeStatus {
-    return { status: "ready" };
-  }
-
-  async generate(request: ProviderRequest): Promise<ProviderResponse> {
-    return {
-      rawText: "hello"
-    };
-  }
-
-  async stream(
-    request: ProviderRequest,
-    handler: ProviderStreamHandler
-  ): Promise<void> {
-    await handler({ type: "start" });
-    await handler({ type: "delta", text: "hello" });
-    await handler({ type: "end", finishReason: "stop" });
-  }
-}
-```
-
-## 권장 디렉터리 구조
-
-기존 워크스페이스 구조에 맞추려면 새 Provider를 별도 패키지로 만드는 것이 가장 단순합니다.
+권장 구조:
 
 ```text
 packages/
@@ -67,13 +27,30 @@ packages/
       index.ts
 ```
 
-패키지 이름 예시는 `@lightway/provider-my-provider`처럼 맞추면 일관성이 좋습니다.
+`pnpm-workspace.yaml`은 이미 `packages/*`를 포함하므로 별도 워크스페이스 설정은 필요 없습니다.
 
-## 구현 순서
+최소 `package.json` 예시:
 
-### 1. 새 Provider 클래스 작성
+```json
+{
+  "name": "@lightway/provider-my-provider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lightway/core": "workspace:*"
+  }
+}
+```
 
-아래 예시는 최소 구현 형태입니다.
+## 2. Provider 구현
+
+핵심 계약은 [`packages/core/src/types.ts`](../packages/core/src/types.ts)에 있습니다.
+
+최소 구현 패턴:
 
 ```ts
 import {
@@ -86,52 +63,24 @@ import {
   type ProviderStreamHandler
 } from "@lightway/core";
 
-export interface MyProviderOptions {
-  apiKey?: string;
-}
-
 export class MyProvider implements ModelProvider {
   readonly name = "my-provider";
-  private readonly apiKey?: string;
-
-  constructor(options: MyProviderOptions = {}) {
-    this.apiKey = options.apiKey ?? process.env.MY_PROVIDER_API_KEY;
-  }
 
   supports(capability: ProviderCapability): boolean {
-    return (
-      capability === "text-generation" ||
-      capability === "structured-output" ||
-      capability === "streaming"
-    );
+    return capability === "text-generation";
   }
 
   getStatus(): ProviderRuntimeStatus {
-    if (!this.apiKey) {
-      return {
-        status: "failed",
-        issue: "MY_PROVIDER_API_KEY_MISSING"
-      };
-    }
-
-    return {
-      status: "ready"
-    };
+    return { status: "ready" };
   }
 
   async generate(request: ProviderRequest): Promise<ProviderResponse> {
-    if (!this.apiKey) {
-      throw new LightwayError(
-        "PROVIDER_EXECUTION_FAILED",
-        "Provider API key is not configured"
-      );
+    if (!request.model) {
+      throw new LightwayError("PROVIDER_EXECUTION_FAILED", "Model is missing");
     }
 
     return {
-      rawText: "sample response",
-      metadata: {
-        requestId: request.requestId
-      }
+      rawText: "sample response"
     };
   }
 
@@ -146,49 +95,56 @@ export class MyProvider implements ModelProvider {
 }
 ```
 
-### 2. Capability를 정확히 선언
+Capability 참고:
 
-- `text-generation`: 기본 텍스트 생성
+- `text-generation`: 일반 텍스트 생성
 - `structured-output`: `outputSchema`가 있는 Definition 처리
-- `streaming`: 스트리밍 응답 처리
-- `tool-calling`: 현재 예약만 되어 있으며 실제 실행 경로는 아직 제공되지 않습니다.
+- `streaming`: 스트리밍 응답
+- `tool-calling`: 향후 확장용 예약 기능
 
-`supports()`는 실제로 제공 가능한 기능만 `true`가 되어야 합니다.
-예를 들어 `structured-output`을 지원하지 않는데 `true`를 반환하면 런타임 동작이 불명확해집니다.
+## 3. 워크스페이스에 연결
 
-### 3. 요청 필드를 반영
+### `apps/gateway` dependency 추가
 
-`ProviderRequest`에는 아래 값들이 들어옵니다.
+`apps/gateway/src/app.ts`에서 새 Provider 패키지를 import할 예정이라면 [`apps/gateway/package.json`](../apps/gateway/package.json)에 dependency를 추가해야 합니다.
 
-- `model`: Definition에서 선택한 모델
-- `systemPrompt`: RAG 결과가 병합된 최종 시스템 프롬프트
-- `messages`: 전처리와 컨텍스트가 반영된 대화 목록
-- `outputSchema`: 구조화 출력 검증에 사용할 스키마
-- `generationOptions.temperature`, `generationOptions.maxTokens`
-- `providerOptions`: Definition 별 Provider 전용 옵션
-- `abortSignal`: 타임아웃이나 취소를 위한 시그널
+```json
+{
+  "dependencies": {
+    "@lightway/provider-my-provider": "workspace:*"
+  }
+}
+```
 
-Provider 구현은 가능하면 이 필드를 그대로 upstream API에 매핑하는 편이 좋습니다.
+### 루트 path alias 추가
 
-### 4. Registry에 등록
+앱과 테스트에서 일관된 import를 쓰려면 [`tsconfig.json`](../tsconfig.json)에 alias를 추가합니다.
 
-애플리케이션 부팅 코드에서 Provider를 등록합니다.
-현재 예시는 [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)에 있습니다.
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@lightway/provider-my-provider": [
+        "packages/provider-my-provider/src/index.ts"
+      ]
+    }
+  }
+}
+```
+
+### bootstrap 등록
+
+[`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)에 Provider를 등록합니다.
 
 ```ts
-import { createLightwayRegistry } from "@lightway/core";
 import { MyProvider } from "@lightway/provider-my-provider";
-
-const registry = createLightwayRegistry();
 
 registry.registerProvider(new MyProvider());
 ```
 
-`name`이 중복되면 Registry가 예외를 던집니다.
+## 4. Definition에서 사용
 
-### 5. Definition에서 사용
-
-Definition JSON의 `provider` 필드가 등록된 Provider의 `name`과 정확히 같아야 합니다.
+Definition의 `provider` 필드는 Provider 클래스의 `name`과 정확히 같아야 합니다.
 
 ```json
 {
@@ -207,17 +163,37 @@ Definition JSON의 `provider` 필드가 등록된 Provider의 `name`과 정확�
 }
 ```
 
-## 구현 팁
+## 5. 테스트와 패키지 문서 추가
 
-- `getStatus()`는 readiness 체크에 사용되므로, 필수 자격 증명 누락 여부를 분명하게 반환하는 편이 좋습니다.
-- 스트리밍을 지원한다면 `stream()`에서도 `abortSignal`을 upstream 호출에 연결하세요.
-- 구조화 출력을 지원한다면 JSON만 반환하도록 upstream 요청을 구성하는 것이 안전합니다.
-- `ProviderResponse.rawText`는 항상 채우는 편이 좋습니다. 후처리와 저장 단계에서 공통적으로 사용됩니다.
-- Provider별 예외는 가능하면 `LightwayError`로 변환해두면 진단이 쉬워집니다.
+권장 후속 작업:
+
+- `tests/provider-my-provider.test.ts` 추가
+- `getStatus()`, `generate()`, `stream()` 동작 검증
+- 구조화 출력이나 스트리밍을 지원한다면 capability 검증 추가
+- 필수 환경변수와 upstream API 동작을 설명하는 패키지 README 추가
+
+## 실무 팁
+
+- `ProviderRequest` 필드는 가능하면 upstream API에 직접 매핑하는 편이 단순합니다.
+- 지원한다면 `abortSignal`을 upstream 요청에 연결하세요.
+- `ProviderResponse.rawText`는 가능하면 항상 채우는 편이 좋습니다.
+- Provider별 예외는 가능하면 `LightwayError`로 변환해 두세요.
+- 워크스페이스 연결 후에는 `corepack pnpm validate`로 바로 확인하세요.
+
+## 통합 체크리스트
+
+- `packages/` 아래 패키지 디렉터리 생성 완료
+- `package.json`에 `@lightway/core: workspace:*` 추가 완료
+- `src/index.ts`에서 Provider export 완료
+- `apps/gateway/package.json` 반영 완료
+- 루트 `tsconfig.json` path alias 반영 완료
+- `apps/gateway/src/app.ts` bootstrap 등록 완료
+- Definition에서 올바른 `provider` 이름 사용 확인
+- 테스트 추가 완료
+- `corepack pnpm validate` 통과 확인
 
 ## 참고 구현
 
 - OpenAI Provider: [`packages/provider-openai/src/index.ts`](../packages/provider-openai/src/index.ts)
 - Bedrock Provider: [`packages/provider-bedrock/src/index.ts`](../packages/provider-bedrock/src/index.ts)
 - Claude Provider: [`packages/provider-claude/src/index.ts`](../packages/provider-claude/src/index.ts)
-- Provider 등록 예시: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

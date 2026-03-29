@@ -2,28 +2,61 @@
 
 ## Overview
 
-A store is the component responsible for persisting and loading conversation context.
-In this project, you implement the `ContextStore` interface and register it in the registry.
+A store persists and loads conversation context.
 
-A store is used when:
+In this monorepo, adding a custom store usually means:
 
-- `context` is `true` in the definition or request
-- `executionOptions.contextStore` is set, or a default store is configured
+1. create a workspace package
+2. implement `ContextStore` or `ContextStoreWithTtl`
+3. export it through `src/index.ts`
+4. add the package to `apps/gateway`
+5. add a root `tsconfig.json` path alias
+6. register it in bootstrap
+7. point definitions to the store name
+8. add tests and run `corepack pnpm validate`
 
-If no usable store exists, context-enabled execution fails.
+## 1. Create A Workspace Package
 
-## Interface To Implement
+Recommended layout:
+
+```text
+packages/
+  store-database/
+    package.json
+    src/
+      index.ts
+```
+
+Minimal `package.json`:
+
+```json
+{
+  "name": "@lightway/store-database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lightway/core": "workspace:*"
+  }
+}
+```
+
+## 2. Implement The Store
+
+Minimal implementation pattern:
 
 ```ts
 import { randomUUID } from "node:crypto";
 import type {
   ContextLoadOptions,
-  ContextStore,
   ContextStoreWithTtl,
   LightwayMessage
 } from "@lightway/core";
 
-export class ExampleStore implements ContextStoreWithTtl {
+export class DatabaseContextStore implements ContextStoreWithTtl {
   async get(
     contextId: string,
     options?: ContextLoadOptions
@@ -41,85 +74,52 @@ export class ExampleStore implements ContextStoreWithTtl {
 }
 ```
 
-`get()` and `append()` are required.
-`create()` and `setTtl()` are optional.
+Notes:
 
-## Method Responsibilities
+- `get()` and `append()` are required
+- `create()` and `setTtl()` are optional
+- if `contextWindow.ttlSeconds` matters for your backend, implement `setTtl()`
 
-- `get(contextId, options)`: load stored messages
-- `append(contextId, messages)`: append user and assistant messages
-- `create()`: create a new context ID yourself if you want to
-- `setTtl()`: support `contextWindow.ttlSeconds`
+## 3. Wire It Into The Workspace
 
-Even without `create()`, the orchestrator can generate a UUID automatically.
+### Add The Dependency To `apps/gateway`
 
-## Example Implementation
-
-This example shows the typical pattern for wrapping a database or Redis client.
-
-```ts
-import { randomUUID } from "node:crypto";
-import type {
-  ContextLoadOptions,
-  ContextStoreWithTtl,
-  LightwayMessage
-} from "@lightway/core";
-
-export interface DatabaseClient {
-  loadMessages(
-    contextId: string,
-    limit?: number
-  ): Promise<LightwayMessage[]>;
-  saveMessages(contextId: string, messages: LightwayMessage[]): Promise<void>;
-  updateExpiry(contextId: string, expiresAt: Date): Promise<void>;
-}
-
-export class DatabaseContextStore implements ContextStoreWithTtl {
-  constructor(private readonly client: DatabaseClient) {}
-
-  async get(
-    contextId: string,
-    options?: ContextLoadOptions
-  ): Promise<LightwayMessage[]> {
-    return await this.client.loadMessages(contextId, options?.limit);
-  }
-
-  async append(contextId: string, messages: LightwayMessage[]): Promise<void> {
-    await this.client.saveMessages(contextId, messages);
-  }
-
-  async create(): Promise<string> {
-    return randomUUID();
-  }
-
-  async setTtl(contextId: string, ttlSeconds: number): Promise<void> {
-    await this.client.updateExpiry(
-      contextId,
-      new Date(Date.now() + ttlSeconds * 1_000)
-    );
+```json
+{
+  "dependencies": {
+    "@lightway/store-database": "workspace:*"
   }
 }
 ```
 
-## Register In The Registry
+### Add A Root Path Alias
 
-The store name is referenced by definitions, so choose it intentionally.
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@lightway/store-database": [
+        "packages/store-database/src/index.ts"
+      ]
+    }
+  }
+}
+```
+
+### Register It In Bootstrap
+
+Register the store in [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts).
 
 ```ts
-import { createLightwayRegistry } from "@lightway/core";
 import { DatabaseContextStore } from "@lightway/store-database";
 
-const registry = createLightwayRegistry();
-
-registry.registerContextStore("database", new DatabaseContextStore(client));
+registry.registerContextStore("database", new DatabaseContextStore());
 registry.setDefaultContextStore("database");
 ```
 
-`setDefaultContextStore()` only works after that store has been registered.
+## 4. Use It In A Definition
 
-## Use It In A Definition
-
-Select the store through `executionOptions.contextStore`.
+Select the store with `executionOptions.contextStore`.
 
 ```json
 {
@@ -146,25 +146,35 @@ Select the store through `executionOptions.contextStore`.
 }
 ```
 
-If the definition does not specify `contextStore`, the registry default store is used.
+## 5. Add Tests And Package Docs
 
-## Good Use Cases
+Recommended follow-up work:
 
-- keeping conversations in Redis
-- storing context in PostgreSQL, MySQL, or DynamoDB
-- applying TTL policies per conversation
-- sharing context across multiple application instances
+- add `tests/store-database.test.ts`
+- verify `get()`, `append()`, and optional `create()` or `setTtl()`
+- test `options.limit` handling
+- add a package README that documents durability, ordering, and TTL behavior
 
 ## Practical Notes
 
-- Respecting `options.limit` in `get()` helps both memory usage and latency.
-- Persisting the `LightwayMessage` shape as-is is usually the simplest approach.
-- Store load failures surface as `CONTEXT_LOAD_FAILED`; save failures surface as `CONTEXT_SAVE_FAILED`.
-- If a definition references a missing store, you get a warning at load time and a runtime error when context execution tries to use it.
-- If your backend does not support TTL, you can omit `setTtl()`.
+- Preserve the `LightwayMessage` shape in storage if possible.
+- If a definition references a missing store, readiness degrades or execution fails once context is needed.
+- The built-in `memory` store is fine for local development only.
+- Run `corepack pnpm validate` after wiring the store into the workspace.
 
-## Reference Implementation
+## Integration Checklist
+
+- package created under `packages/store-*`
+- `package.json` added
+- `src/index.ts` exports the store
+- `apps/gateway/package.json` updated
+- root `tsconfig.json` path alias updated
+- `apps/gateway/src/app.ts` registration added
+- default store set if needed
+- definitions point to the correct store name
+- tests added
+- `corepack pnpm validate` passes
+
+## Reference Implementations
 
 - In-memory store: [`packages/store-in-memory/src/index.ts`](../packages/store-in-memory/src/index.ts)
-- Registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)
-- Definition example: [`definitions/animal-pedia.json`](../definitions/animal-pedia.json)

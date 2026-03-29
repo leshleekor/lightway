@@ -3,116 +3,114 @@
 ## Overview
 
 A pre-processor transforms the request context before the provider is called.
-The execution order is:
 
-1. Input validation
-2. Context loading
-3. Pre-processors
-4. RAG
-5. Provider call
+To add one cleanly in this monorepo, you usually need to:
 
-That makes pre-processors a good fit for normalizing input, adjusting messages, or attaching metadata.
+1. create a workspace package
+2. implement the `Preprocessor` contract
+3. export it through `src/index.ts`
+4. add the package to `apps/gateway`
+5. add a root `tsconfig.json` path alias
+6. register it in bootstrap
+7. reference it from a definition
+8. add tests and run `corepack pnpm validate`
 
-## Interface To Implement
+## 1. Create A Workspace Package
 
-```ts
-import type { LightwayContext, Preprocessor } from "@lightway/core";
+Recommended layout:
 
-export class ExamplePreprocessor implements Preprocessor {
-  readonly name = "example-preprocessor";
+```text
+packages/
+  preprocess-custom/
+    package.json
+    src/
+      index.ts
+```
 
-  async run(context: LightwayContext): Promise<LightwayContext> {
-    return context;
+Minimal `package.json`:
+
+```json
+{
+  "name": "@lightway/preprocess-custom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lightway/core": "workspace:*"
   }
 }
 ```
 
-`name` is the identifier referenced from the definition `preprocess` array.
+## 2. Implement The Preprocessor
 
-If your preprocessor needs per-definition settings, it can read them from
-`context.definition.preprocessConfig?.[preprocessorName]`.
-
-## Example Implementation
-
-This example normalizes string input and keeps the latest user message in sync.
+Minimal implementation pattern:
 
 ```ts
 import type { LightwayContext, Preprocessor } from "@lightway/core";
-
-function normalizeInput(value: unknown): unknown {
-  if (typeof value === "string") {
-    return value.trim().replace(/\s+/g, " ");
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeInput(item));
-  }
-
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, current]) => [key, normalizeInput(current)])
-    );
-  }
-
-  return value;
-}
 
 export class NormalizeInputPreprocessor implements Preprocessor {
   readonly name = "normalize-input";
 
   async run(context: LightwayContext): Promise<LightwayContext> {
-    const normalizedInput = normalizeInput(context.input);
-    const nextMessages = [...context.messages];
-
-    for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
-      const message = nextMessages[index];
-      if (!message) {
-        continue;
-      }
-
-      if (message.role === "user" && message.metadata?.source !== "rag") {
-        nextMessages[index] = {
-          ...message,
-          content:
-            typeof normalizedInput === "string"
-              ? normalizedInput
-              : JSON.stringify(normalizedInput, null, 2)
-        };
-        break;
-      }
-    }
+    const normalizedInput =
+      typeof context.input === "string" ? context.input.trim() : context.input;
 
     return {
       ...context,
-      input: normalizedInput,
-      messages: nextMessages,
-      metadata: {
-        ...context.metadata,
-        normalizedBy: this.name
-      }
+      input: normalizedInput
     };
   }
 }
 ```
 
-## Register In The Registry
+Notes:
 
-Register the pre-processor at bootstrap time.
+- `name` is what definitions use in the `preprocess` array
+- if you change `context.input`, you often also need to update `context.messages`
+- per-definition config is available in `context.definition.preprocessConfig`
+
+## 3. Wire It Into The Workspace
+
+### Add The Dependency To `apps/gateway`
+
+```json
+{
+  "dependencies": {
+    "@lightway/preprocess-custom": "workspace:*"
+  }
+}
+```
+
+### Add A Root Path Alias
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@lightway/preprocess-custom": [
+        "packages/preprocess-custom/src/index.ts"
+      ]
+    }
+  }
+}
+```
+
+### Register It In Bootstrap
+
+Register it in [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts).
 
 ```ts
-import { createLightwayRegistry } from "@lightway/core";
-import { NormalizeInputPreprocessor } from "@lightway/plugin-preprocess-custom";
-
-const registry = createLightwayRegistry();
+import { NormalizeInputPreprocessor } from "@lightway/preprocess-custom";
 
 registry.registerPreprocessor(new NormalizeInputPreprocessor());
 ```
 
-The current bootstrap example lives in [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts).
+## 4. Use It In A Definition
 
-## Use It In A Definition
-
-Add names to the definition `preprocess` array. They run in array order.
+Add the preprocessor name to the definition `preprocess` array.
 
 ```json
 {
@@ -132,7 +130,7 @@ Add names to the definition `preprocess` array. They run in array order.
 }
 ```
 
-Definition-specific config can be supplied through `preprocessConfig`.
+If the preprocessor needs definition-specific settings:
 
 ```json
 {
@@ -143,42 +141,49 @@ Definition-specific config can be supplied through `preprocessConfig`.
   "inputSchema": {
     "type": "object",
     "properties": {
-      "message": { "type": "string" },
-      "customerName": { "type": "string" }
+      "message": { "type": "string" }
     },
     "required": ["message"],
     "additionalProperties": false
   },
-  "preprocess": ["pii-masking"],
+  "preprocess": ["normalize-input"],
   "preprocessConfig": {
-    "pii-masking": {
-      "fieldNames": {
-        "customerName": "full-masking",
-        "deliveryAddress": "sample-masking"
-      }
+    "normalize-input": {
+      "trim": true
     }
   }
 }
 ```
 
-## Good Use Cases
+## 5. Add Tests And Package Docs
 
-- input string cleanup
-- sensitive data masking
-- shared metadata injection
-- converting input objects to an internal canonical shape
-- refining a query before RAG runs
+Recommended follow-up work:
+
+- add `tests/preprocess-custom.test.ts`
+- verify how `context.input`, `context.messages`, and `context.metadata` change
+- test definition-specific config paths if you use `preprocessConfig`
+- add a short package README describing expected config
 
 ## Practical Notes
 
 - Prefer returning a new context object instead of mutating the existing one.
-- If you change `context.input`, also update `context.messages` so the provider sees the same data.
-- If you need Definition-specific behavior, document the expected shape in `preprocessConfig`.
-- If a pre-processor throws, the orchestrator wraps it as `PREPROCESS_FAILED`.
-- If a definition references an unregistered name, you get a warning at load time and a runtime error when that path executes.
+- If a definition references an unregistered preprocessor, load-time warnings appear and runtime execution fails when that path is used.
+- Use the current naming convention: `preprocess-*`, not `plugin-preprocess-*`.
+- Run `corepack pnpm validate` after registration.
 
-## Reference Implementation
+## Integration Checklist
 
-- Built-in implementation: [`packages/preprocess-common/src/index.ts`](../packages/preprocess-common/src/index.ts)
-- PII masking example: [`packages/preprocess-pii-masking/src/index.ts`](../packages/preprocess-pii-masking/src/index.ts)
-- Registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)
+- package created under `packages/preprocess-*`
+- `package.json` added
+- `src/index.ts` exports the preprocessor
+- `apps/gateway/package.json` updated
+- root `tsconfig.json` path alias updated
+- `apps/gateway/src/app.ts` registration added
+- definition `preprocess` entry added
+- tests added
+- `corepack pnpm validate` passes
+
+## Reference Implementations
+
+- Common preprocessors: [`packages/preprocess-common/src/index.ts`](../packages/preprocess-common/src/index.ts)
+- PII masking: [`packages/preprocess-pii-masking/src/index.ts`](../packages/preprocess-pii-masking/src/index.ts)
