@@ -10,20 +10,26 @@
       "message": {
         "type": "string"
       },
-      "customerName": {
-        "type": "string"
-      },
-      "receiverName": {
-        "type": "string"
-      },
-      "customerEmail": {
-        "type": "string"
-      },
-      "customerPhone": {
-        "type": "string"
-      },
-      "deliveryAddress": {
-        "type": "string"
+      "data": {
+        "type": "object",
+        "properties": {
+          "customerName": {
+            "type": "string"
+          },
+          "receiverName": {
+            "type": "string"
+          },
+          "customerEmail": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "deliveryAddress": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       }
     },
     "required": ["message"],

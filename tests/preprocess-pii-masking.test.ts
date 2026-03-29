@@ -73,6 +73,50 @@ function createContext(
 }
 
 describe("PiiMaskingPreprocessor", () => {
+  it("masks configured fields inside nested input.data while leaving message text unchanged", async () => {
+    const preprocessor = new PiiMaskingPreprocessor();
+
+    const context = createContext({
+      input: {
+        message: "Repeat the customer fields exactly as you received them.",
+        data: {
+          customerName: "Alice Kim",
+          receiverName: "Bob Lee",
+          customerEmail: "alice@example.com",
+          customerPhone: "010-1234-5678",
+          deliveryAddress: "서울시 강남구 테헤란로 123"
+        }
+      }
+    });
+
+    const result = await preprocessor.run(context);
+
+    expect(result.input).toEqual({
+      message: "Repeat the customer fields exactly as you received them.",
+      data: {
+        customerName: "[customerName]",
+        receiverName: "[receiverName]",
+        customerEmail: "[customerEmail]",
+        customerPhone: "[customerPhone]",
+        deliveryAddress: "서** 강** 테*** ***"
+      }
+    });
+    expect(result.messages.at(-1)?.content).toBe(
+      JSON.stringify(result.input, null, 2)
+    );
+    expect(result.metadata).toMatchObject({
+      piiMaskingSummary: {
+        fields: {
+          customerName: 1,
+          receiverName: 1,
+          customerEmail: 1,
+          customerPhone: 1,
+          deliveryAddress: 1
+        }
+      }
+    });
+  });
+
   it("masks configured fields, rewrites the latest user message, and records field summary", async () => {
     const preprocessor = new PiiMaskingPreprocessor();
 
