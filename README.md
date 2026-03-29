@@ -56,10 +56,6 @@ Claude definition example for manual adoption:
 
 - `definitions/examples/animal-pedia-claude.json`
 
-PII masking definition example you can execute directly:
-
-- `definitions/customer-support-pii.json`
-
 ## Package Docs
 
 - [apps/gateway README](./apps/gateway/README.md)
