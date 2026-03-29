@@ -47,6 +47,7 @@ The repository now contains a runnable pnpm workspace with:
 - `packages/provider-claude`: Anthropic Claude Messages API adapter
 - `packages/store-in-memory`: in-memory context store
 - `packages/preprocess-common`: common preprocessors
+- `packages/preprocess-pii-masking`: definition-configured PII masking preprocessor
 - `packages/postprocess-common`: common postprocessors
 - `packages/postprocess-audit-log`: execution audit log hook, sink, and standalone postprocessor
 - `definitions/`: runnable example definitions
@@ -54,6 +55,10 @@ The repository now contains a runnable pnpm workspace with:
 Claude definition example for manual adoption:
 
 - `definitions/examples/animal-pedia-claude.json`
+
+PII masking definition example you can execute directly:
+
+- `definitions/customer-support-pii.json`
 
 ## Package Docs
 
@@ -66,6 +71,7 @@ Claude definition example for manual adoption:
 - [packages/provider-claude README](./packages/provider-claude/README.md)
 - [packages/store-in-memory README](./packages/store-in-memory/README.md)
 - [packages/preprocess-common README](./packages/preprocess-common/README.md)
+- [packages/preprocess-pii-masking README](./packages/preprocess-pii-masking/README.md)
 - [packages/postprocess-common README](./packages/postprocess-common/README.md)
 - [packages/postprocess-audit-log README](./packages/postprocess-audit-log/README.md)
 

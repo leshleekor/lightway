@@ -17,6 +17,7 @@ import {
 } from "@lightway/postprocess-audit-log";
 import { TrimTextOutputPostprocessor } from "@lightway/postprocess-common";
 import { TrimStringInputPreprocessor } from "@lightway/preprocess-common";
+import { PiiMaskingPreprocessor } from "@lightway/preprocess-pii-masking";
 
 export interface GatewayAppConfig {
   authToken?: string;
@@ -36,6 +37,7 @@ export async function createGatewayApplication(config: GatewayAppConfig = {}) {
   registry.registerContextStore("memory", new InMemoryContextStore());
   registry.setDefaultContextStore("memory");
   registry.registerPreprocessor(new TrimStringInputPreprocessor());
+  registry.registerPreprocessor(new PiiMaskingPreprocessor());
   registry.registerPostprocessor(new TrimTextOutputPostprocessor());
 
   const definitionsDir = resolve(

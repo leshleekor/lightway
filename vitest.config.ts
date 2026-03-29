@@ -24,6 +24,9 @@ export default defineConfig({
       "@lightway/preprocess-common": resolve(
         "packages/preprocess-common/src/index.ts"
       ),
+      "@lightway/preprocess-pii-masking": resolve(
+        "packages/preprocess-pii-masking/src/index.ts"
+      ),
       "@lightway/postprocess-common": resolve(
         "packages/postprocess-common/src/index.ts"
       ),

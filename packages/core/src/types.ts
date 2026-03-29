@@ -16,6 +16,8 @@ export interface JsonSchema {
 }
 
 export type SchemaLike<T = unknown> = ZodType<T> | JsonSchema;
+export type PluginConfig = Record<string, unknown>;
+export type PluginConfigMap = Record<string, PluginConfig>;
 
 export interface ExecuteRequest {
   definitionName: string;
@@ -55,7 +57,9 @@ export interface AIDefinition<TInput = unknown, TOutput = unknown> {
   inputSchema: SchemaLike<TInput>;
   outputSchema?: SchemaLike<TOutput>;
   preprocess?: string[];
+  preprocessConfig?: PluginConfigMap;
   postprocess?: string[];
+  postprocessConfig?: PluginConfigMap;
   rag?: RagConfig[];
   providerOptions?: Record<string, unknown>;
   executionOptions?: {
@@ -320,7 +324,9 @@ export interface SanitizedAIDefinition {
   inputSchema: SchemaLike;
   outputSchema?: SchemaLike;
   preprocess?: string[];
+  preprocessConfig?: PluginConfigMap;
   postprocess?: string[];
+  postprocessConfig?: PluginConfigMap;
   rag?: RagConfig[];
   executionOptions?: AIDefinition["executionOptions"];
   warnings?: WarningDetail[];
