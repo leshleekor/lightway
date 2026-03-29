@@ -29,6 +29,9 @@ export class ExamplePreprocessor implements Preprocessor {
 
 `name` is the identifier referenced from the definition `preprocess` array.
 
+If your preprocessor needs per-definition settings, it can read them from
+`context.definition.preprocessConfig?.[preprocessorName]`.
+
 ## Example Implementation
 
 This example normalizes string input and keeps the latest user message in sync.
@@ -129,6 +132,35 @@ Add names to the definition `preprocess` array. They run in array order.
 }
 ```
 
+Definition-specific config can be supplied through `preprocessConfig`.
+
+```json
+{
+  "name": "customer-support",
+  "provider": "openai",
+  "model": "gpt-5.4-mini-2026-03-17",
+  "systemPrompt": "You are a helpful assistant.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "message": { "type": "string" },
+      "customerName": { "type": "string" }
+    },
+    "required": ["message"],
+    "additionalProperties": false
+  },
+  "preprocess": ["pii-masking"],
+  "preprocessConfig": {
+    "pii-masking": {
+      "fieldNames": {
+        "customerName": "full-masking",
+        "deliveryAddress": "sample-masking"
+      }
+    }
+  }
+}
+```
+
 ## Good Use Cases
 
 - input string cleanup
@@ -141,10 +173,12 @@ Add names to the definition `preprocess` array. They run in array order.
 
 - Prefer returning a new context object instead of mutating the existing one.
 - If you change `context.input`, also update `context.messages` so the provider sees the same data.
+- If you need Definition-specific behavior, document the expected shape in `preprocessConfig`.
 - If a pre-processor throws, the orchestrator wraps it as `PREPROCESS_FAILED`.
 - If a definition references an unregistered name, you get a warning at load time and a runtime error when that path executes.
 
 ## Reference Implementation
 
 - Built-in implementation: [`packages/preprocess-common/src/index.ts`](../packages/preprocess-common/src/index.ts)
+- PII masking example: [`packages/preprocess-pii-masking/src/index.ts`](../packages/preprocess-pii-masking/src/index.ts)
 - Registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

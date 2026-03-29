@@ -40,6 +40,7 @@ The gateway registers these packages by default:
 - `@lightway/provider-claude`
 - `@lightway/store-in-memory`
 - `@lightway/preprocess-common`
+- `@lightway/preprocess-pii-masking`
 - `@lightway/postprocess-common`
 - `@lightway/postprocess-audit-log` via `ConsoleExecutionAuditSink`
 

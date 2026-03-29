@@ -13,6 +13,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && !Array.isArray(value);
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -105,6 +109,33 @@ function validateRagConfig(config: RagConfig, path: string, errors: string[]): v
   }
 }
 
+function validatePluginConfigMap(
+  value: unknown,
+  path: string,
+  declaredNames: string[] | undefined,
+  declaredPath: "preprocess" | "postprocess",
+  errors: string[]
+): void {
+  if (!isPlainObject(value)) {
+    errors.push(`${path} must be an object`);
+    return;
+  }
+
+  const declared = new Set(declaredNames ?? []);
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (!declared.has(key)) {
+      errors.push(
+        `${path}.${key} references a plugin that is not declared in ${declaredPath}`
+      );
+    }
+
+    if (!isPlainObject(entry)) {
+      errors.push(`${path}.${key} must be an object`);
+    }
+  }
+}
+
 function validateDefinitionStructure(definition: AIDefinition): void {
   const errors: string[] = [];
 
@@ -153,11 +184,31 @@ function validateDefinitionStructure(definition: AIDefinition): void {
     errors.push("preprocess must be an array of strings");
   }
 
+  if (definition.preprocessConfig !== undefined) {
+    validatePluginConfigMap(
+      definition.preprocessConfig,
+      "preprocessConfig",
+      definition.preprocess,
+      "preprocess",
+      errors
+    );
+  }
+
   if (
     definition.postprocess !== undefined &&
     !isStringArray(definition.postprocess)
   ) {
     errors.push("postprocess must be an array of strings");
+  }
+
+  if (definition.postprocessConfig !== undefined) {
+    validatePluginConfigMap(
+      definition.postprocessConfig,
+      "postprocessConfig",
+      definition.postprocess,
+      "postprocess",
+      errors
+    );
   }
 
   if (definition.rag !== undefined) {

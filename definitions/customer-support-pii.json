@@ -1,0 +1,55 @@
+{
+  "name": "customer-support-pii",
+  "description": "Support assistant example with definition-configured PII masking.",
+  "provider": "openai",
+  "model": "gpt-5.4-mini-2026-03-17",
+  "systemPrompt": "You are a support assistant. Respond clearly and use the masked placeholders exactly as provided in the conversation.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "message": {
+        "type": "string"
+      },
+      "customerName": {
+        "type": "string"
+      },
+      "receiverName": {
+        "type": "string"
+      },
+      "customerEmail": {
+        "type": "string"
+      },
+      "customerPhone": {
+        "type": "string"
+      },
+      "deliveryAddress": {
+        "type": "string"
+      }
+    },
+    "required": ["message"],
+    "additionalProperties": false
+  },
+  "preprocess": ["trim-string-input", "pii-masking"],
+  "preprocessConfig": {
+    "pii-masking": {
+      "fieldNames": {
+        "customerName": "full-masking",
+        "receiverName": "full-masking",
+        "customerEmail": "full-masking",
+        "customerPhone": "full-masking",
+        "deliveryAddress": "sample-masking"
+      }
+    }
+  },
+  "executionOptions": {
+    "context": true,
+    "contextStore": "memory",
+    "contextWindow": {
+      "maxMessages": 20,
+      "ttlSeconds": 86400
+    },
+    "stream": false,
+    "timeoutMs": 30000,
+    "temperature": 0.2
+  }
+}

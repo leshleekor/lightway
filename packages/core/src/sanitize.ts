@@ -16,7 +16,9 @@ export function sanitizeDefinition(
     inputSchema: definition.inputSchema,
     outputSchema: definition.outputSchema,
     preprocess: definition.preprocess,
+    preprocessConfig: definition.preprocessConfig,
     postprocess: definition.postprocess,
+    postprocessConfig: definition.postprocessConfig,
     rag: definition.rag,
     executionOptions: definition.executionOptions
   };
