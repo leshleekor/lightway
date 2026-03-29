@@ -84,6 +84,39 @@ Registry 이름:
 - field name은 대소문자 정규화나 suffix 매칭 없이 문자열 완전 일치로 비교합니다.
 - `preprocess`에 `pii-masking`을 선언했다면 해당 config도 반드시 제공해야 합니다.
 
+## 실행 예시
+
+포함된 example definition:
+
+- `definitions/customer-support-pii.json`
+
+예시 요청:
+
+```bash
+curl -X POST http://localhost:3000/v1/execute \
+  -H "Authorization: Bearer $LIGHTWAY_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "definitionName": "customer-support-pii",
+    "context": true,
+    "contextId": "ctx-pii-1",
+    "input": {
+      "message": "Repeat the customer fields exactly as you received them.",
+      "customerName": "Alice Kim",
+      "receiverName": "Bob Lee",
+      "customerEmail": "alice@example.com",
+      "customerPhone": "010-1234-5678",
+      "deliveryAddress": "서울시 강남구 테헤란로 123"
+    }
+  }'
+```
+
+기대 결과:
+
+- `customerName`, `receiverName`, `customerEmail`, `customerPhone`은 `[fieldName]` 토큰으로 치환됩니다.
+- `deliveryAddress`는 `sample-masking` 규칙에 따라 부분 마스킹됩니다.
+- `fieldNames`에 없는 자유 텍스트는 v1에서 자동 마스킹되지 않습니다.
+
 ## 환경변수
 
 이 패키지 자체는 환경변수를 사용하지 않습니다.

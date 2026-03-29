@@ -84,6 +84,39 @@ Limitations:
 - field names are matched by exact string equality only
 - if `pii-masking` is declared in `preprocess`, its definition config is required
 
+## Example Request
+
+Included example definition:
+
+- `definitions/customer-support-pii.json`
+
+Request example:
+
+```bash
+curl -X POST http://localhost:3000/v1/execute \
+  -H "Authorization: Bearer $LIGHTWAY_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "definitionName": "customer-support-pii",
+    "context": true,
+    "contextId": "ctx-pii-1",
+    "input": {
+      "message": "Repeat the customer fields exactly as you received them.",
+      "customerName": "Alice Kim",
+      "receiverName": "Bob Lee",
+      "customerEmail": "alice@example.com",
+      "customerPhone": "010-1234-5678",
+      "deliveryAddress": "서울시 강남구 테헤란로 123"
+    }
+  }'
+```
+
+Expected behavior:
+
+- `customerName`, `receiverName`, `customerEmail`, and `customerPhone` are replaced with `[fieldName]` tokens.
+- `deliveryAddress` is partially masked using `sample-masking`.
+- free-text values that are not configured in `fieldNames` are not automatically masked in v1.
+
 ## Environment variables
 
 This package does not use package-level environment variables.
