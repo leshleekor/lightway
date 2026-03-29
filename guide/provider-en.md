@@ -2,62 +2,22 @@
 
 ## Overview
 
-A provider is the adapter that lets Lightway talk to an actual AI model backend.
-To add a new provider, implement the `ModelProvider` interface from `@lightway/core` and register it in the application bootstrap.
+A provider is the adapter that lets Lightway call an AI model backend.
 
-Providers are used in this order:
+To add one in this monorepo, you need to do more than implement `ModelProvider`:
 
-1. A definition points to a `provider` name.
-2. The registry resolves a provider with the same name.
-3. The orchestrator calls `generate()` or `stream()`.
+1. create a workspace package
+2. implement the provider class
+3. expose it through the package entrypoint
+4. add the package to `apps/gateway`
+5. add a root `tsconfig.json` path alias
+6. register it in bootstrap
+7. add at least one test
+8. run `corepack pnpm validate`
 
-If the provider is not registered, definition loading fails.
+## 1. Create A Workspace Package
 
-## Interface To Implement
-
-The core contract lives in [`packages/core/src/types.ts`](../packages/core/src/types.ts).
-
-```ts
-import type {
-  ModelProvider,
-  ProviderCapability,
-  ProviderRequest,
-  ProviderResponse,
-  ProviderRuntimeStatus,
-  ProviderStreamHandler
-} from "@lightway/core";
-
-export class ExampleProvider implements ModelProvider {
-  readonly name = "example";
-
-  supports(capability: ProviderCapability): boolean {
-    return capability === "text-generation";
-  }
-
-  getStatus(): ProviderRuntimeStatus {
-    return { status: "ready" };
-  }
-
-  async generate(request: ProviderRequest): Promise<ProviderResponse> {
-    return {
-      rawText: "hello"
-    };
-  }
-
-  async stream(
-    request: ProviderRequest,
-    handler: ProviderStreamHandler
-  ): Promise<void> {
-    await handler({ type: "start" });
-    await handler({ type: "delta", text: "hello" });
-    await handler({ type: "end", finishReason: "stop" });
-  }
-}
-```
-
-## Recommended Package Layout
-
-The cleanest option in this monorepo is to place the provider in its own package.
+Recommended layout:
 
 ```text
 packages/
@@ -67,13 +27,30 @@ packages/
       index.ts
 ```
 
-Using a package name such as `@lightway/provider-my-provider` keeps it consistent with the existing workspace.
+`pnpm-workspace.yaml` already includes `packages/*`, so no extra workspace config is needed.
 
-## Implementation Steps
+Minimal `package.json`:
 
-### 1. Create the provider class
+```json
+{
+  "name": "@lightway/provider-my-provider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lightway/core": "workspace:*"
+  }
+}
+```
 
-This is a minimal implementation pattern.
+## 2. Implement The Provider
+
+The contract lives in [`packages/core/src/types.ts`](../packages/core/src/types.ts).
+
+Minimal implementation pattern:
 
 ```ts
 import {
@@ -86,52 +63,24 @@ import {
   type ProviderStreamHandler
 } from "@lightway/core";
 
-export interface MyProviderOptions {
-  apiKey?: string;
-}
-
 export class MyProvider implements ModelProvider {
   readonly name = "my-provider";
-  private readonly apiKey?: string;
-
-  constructor(options: MyProviderOptions = {}) {
-    this.apiKey = options.apiKey ?? process.env.MY_PROVIDER_API_KEY;
-  }
 
   supports(capability: ProviderCapability): boolean {
-    return (
-      capability === "text-generation" ||
-      capability === "structured-output" ||
-      capability === "streaming"
-    );
+    return capability === "text-generation";
   }
 
   getStatus(): ProviderRuntimeStatus {
-    if (!this.apiKey) {
-      return {
-        status: "failed",
-        issue: "MY_PROVIDER_API_KEY_MISSING"
-      };
-    }
-
-    return {
-      status: "ready"
-    };
+    return { status: "ready" };
   }
 
   async generate(request: ProviderRequest): Promise<ProviderResponse> {
-    if (!this.apiKey) {
-      throw new LightwayError(
-        "PROVIDER_EXECUTION_FAILED",
-        "Provider API key is not configured"
-      );
+    if (!request.model) {
+      throw new LightwayError("PROVIDER_EXECUTION_FAILED", "Model is missing");
     }
 
     return {
-      rawText: "sample response",
-      metadata: {
-        requestId: request.requestId
-      }
+      rawText: "sample response"
     };
   }
 
@@ -146,46 +95,54 @@ export class MyProvider implements ModelProvider {
 }
 ```
 
-### 2. Declare capabilities accurately
+Capability notes:
 
-- `text-generation`: basic text generation
+- `text-generation`: plain text generation
 - `structured-output`: definitions with `outputSchema`
 - `streaming`: streaming responses
-- `tool-calling`: reserved for future use; no execution path yet
+- `tool-calling`: reserved for a future phase
 
-`supports()` should only return `true` for capabilities you really implement.
+## 3. Wire It Into The Workspace
 
-### 3. Map request fields
+### Add The Dependency To `apps/gateway`
 
-`ProviderRequest` includes:
+If `apps/gateway/src/app.ts` imports your provider package, add it to [`apps/gateway/package.json`](../apps/gateway/package.json).
 
-- `model`: model selected by the definition
-- `systemPrompt`: final system prompt after RAG merge
-- `messages`: conversation after preprocessing and context loading
-- `outputSchema`: schema used for structured output validation
-- `generationOptions.temperature`, `generationOptions.maxTokens`
-- `providerOptions`: provider-specific definition options
-- `abortSignal`: timeout and cancellation signal
+```json
+{
+  "dependencies": {
+    "@lightway/provider-my-provider": "workspace:*"
+  }
+}
+```
 
-In practice, your provider should map these fields as directly as possible to the upstream API.
+### Add A Root Path Alias
 
-### 4. Register it in the registry
+Add the package alias to [`tsconfig.json`](../tsconfig.json) so the app and tests can import it consistently.
 
-Register the provider during application bootstrap.
-The current bootstrap example is in [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts).
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@lightway/provider-my-provider": [
+        "packages/provider-my-provider/src/index.ts"
+      ]
+    }
+  }
+}
+```
+
+### Register It In Bootstrap
+
+Register the provider in [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts).
 
 ```ts
-import { createLightwayRegistry } from "@lightway/core";
 import { MyProvider } from "@lightway/provider-my-provider";
-
-const registry = createLightwayRegistry();
 
 registry.registerProvider(new MyProvider());
 ```
 
-The registry throws if another provider already uses the same `name`.
-
-### 5. Reference it from a definition
+## 4. Use It From A Definition
 
 The definition `provider` field must exactly match the provider `name`.
 
@@ -206,17 +163,37 @@ The definition `provider` field must exactly match the provider `name`.
 }
 ```
 
+## 5. Add Tests And Package Docs
+
+Recommended follow-up work:
+
+- add `tests/provider-my-provider.test.ts`
+- cover `getStatus()`, `generate()`, and `stream()` behavior
+- verify capability reporting if you support structured output or streaming
+- add a package README so future maintainers know required env vars and upstream API behavior
+
 ## Practical Notes
 
-- `getStatus()` feeds readiness checks, so use it to expose missing credentials or broken configuration.
-- If you support streaming, pass `abortSignal` to the upstream client there as well.
-- If you support structured output, configure the upstream call to return JSON-only output when possible.
-- Prefer always setting `ProviderResponse.rawText`; post-processing and persistence rely on it.
-- Converting provider-specific failures into `LightwayError` makes diagnostics much easier.
+- Map `ProviderRequest` fields to the upstream API as directly as possible.
+- Pass `abortSignal` to upstream requests when supported.
+- Prefer always setting `ProviderResponse.rawText`.
+- Convert provider-specific failures into `LightwayError` when you can.
+- Run `corepack pnpm validate` after wiring the package into the workspace.
+
+## Integration Checklist
+
+- package directory created under `packages/`
+- `package.json` added with `@lightway/core` as `workspace:*`
+- `src/index.ts` exports the provider class
+- `apps/gateway/package.json` updated
+- root `tsconfig.json` path alias updated
+- `apps/gateway/src/app.ts` registration added
+- definition uses the correct `provider` name
+- tests added
+- `corepack pnpm validate` passes
 
 ## Reference Implementations
 
 - OpenAI provider: [`packages/provider-openai/src/index.ts`](../packages/provider-openai/src/index.ts)
 - Bedrock provider: [`packages/provider-bedrock/src/index.ts`](../packages/provider-bedrock/src/index.ts)
 - Claude provider: [`packages/provider-claude/src/index.ts`](../packages/provider-claude/src/index.ts)
-- Provider registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)

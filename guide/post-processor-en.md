@@ -3,57 +3,53 @@
 ## Overview
 
 A post-processor transforms the result after the provider responds and before the final API response is returned.
-The execution order is:
 
-1. Provider response
-2. Structured-output validation and repair when needed
-3. Post-processors
-4. Context persistence
-5. API response
+Typical integration steps in this monorepo:
 
-That makes post-processors a good fit for output cleanup, redaction, and metadata enrichment.
+1. create a workspace package
+2. implement the `Postprocessor` contract
+3. export it through `src/index.ts`
+4. add the package to `apps/gateway`
+5. add a root `tsconfig.json` path alias
+6. register it in bootstrap
+7. reference it from a definition
+8. add tests and run `corepack pnpm validate`
 
-## Interface To Implement
+## 1. Create A Workspace Package
 
-```ts
-import type { LightwayContext, LightwayResult, Postprocessor } from "@lightway/core";
+Recommended layout:
 
-export class ExamplePostprocessor implements Postprocessor {
-  readonly name = "example-postprocessor";
+```text
+packages/
+  postprocess-custom/
+    package.json
+    src/
+      index.ts
+```
 
-  async run(
-    result: LightwayResult,
-    context: LightwayContext
-  ): Promise<LightwayResult> {
-    return result;
+Minimal `package.json`:
+
+```json
+{
+  "name": "@lightway/postprocess-custom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lightway/core": "workspace:*"
   }
 }
 ```
 
-## Example Implementation
+## 2. Implement The Post-Processor
 
-This example cleans text output and adds metadata.
+Minimal implementation pattern:
 
 ```ts
 import type { LightwayContext, LightwayResult, Postprocessor } from "@lightway/core";
-
-function trimDeep(value: unknown): unknown {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => trimDeep(item));
-  }
-
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, current]) => [key, trimDeep(current)])
-    );
-  }
-
-  return value;
-}
 
 export class CleanOutputPostprocessor implements Postprocessor {
   readonly name = "clean-output";
@@ -65,7 +61,6 @@ export class CleanOutputPostprocessor implements Postprocessor {
     return {
       ...result,
       rawText: result.rawText.trim(),
-      output: trimDeep(result.output),
       metadata: {
         ...result.metadata,
         postprocessedBy: this.name,
@@ -76,22 +71,47 @@ export class CleanOutputPostprocessor implements Postprocessor {
 }
 ```
 
-## Register In The Registry
+Notes:
+
+- `name` is what definitions use in the `postprocess` array
+- for structured output, keep `result.output` aligned with any changes you make
+- post-processors run before context persistence
+
+## 3. Wire It Into The Workspace
+
+### Add The Dependency To `apps/gateway`
+
+```json
+{
+  "dependencies": {
+    "@lightway/postprocess-custom": "workspace:*"
+  }
+}
+```
+
+### Add A Root Path Alias
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@lightway/postprocess-custom": [
+        "packages/postprocess-custom/src/index.ts"
+      ]
+    }
+  }
+}
+```
+
+### Register It In Bootstrap
 
 ```ts
-import { createLightwayRegistry } from "@lightway/core";
-import { CleanOutputPostprocessor } from "@lightway/plugin-postprocess-custom";
-
-const registry = createLightwayRegistry();
+import { CleanOutputPostprocessor } from "@lightway/postprocess-custom";
 
 registry.registerPostprocessor(new CleanOutputPostprocessor());
 ```
 
-The default registration example is in [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts).
-
-## Use It In A Definition
-
-Add names to the definition `postprocess` array. They run in array order.
+## 4. Use It In A Definition
 
 ```json
 {
@@ -111,22 +131,53 @@ Add names to the definition `postprocess` array. They run in array order.
 }
 ```
 
-## Good Use Cases
+If the post-processor needs per-definition configuration:
 
-- text cleanup
-- post-processing structured JSON fields
-- removing sensitive data
-- adding usage or trace metadata
-- shaping the final product-facing output
+```json
+{
+  "name": "custom-chat",
+  "provider": "openai",
+  "model": "gpt-5.4-mini-2026-03-17",
+  "systemPrompt": "You are a helpful assistant.",
+  "inputSchema": { "type": "string" },
+  "postprocess": ["clean-output"],
+  "postprocessConfig": {
+    "clean-output": {
+      "trim": true
+    }
+  }
+}
+```
+
+## 5. Add Tests And Package Docs
+
+Recommended follow-up work:
+
+- add `tests/postprocess-custom.test.ts`
+- verify raw text and structured output changes
+- verify metadata additions
+- add a package README describing config, side effects, and assumptions
 
 ## Practical Notes
 
-- For structured-output definitions, `result.output` may become the final API response, so keep it consistent.
-- For plain-text responses, `result.output` can be undefined, so handle `rawText` as well.
-- Post-processors run before context persistence, so the saved assistant message reflects the processed output.
-- If a definition references an unregistered name, you get a warning at load time and a runtime error when that path executes.
+- For plain-text responses, work from `rawText`.
+- For structured-output definitions, keep `result.output` consistent.
+- Use the current naming convention: `postprocess-*`, not `plugin-postprocess-*`.
+- Run `corepack pnpm validate` after wiring everything up.
 
-## Reference Implementation
+## Integration Checklist
 
-- Built-in implementation: [`packages/postprocess-common/src/index.ts`](../packages/postprocess-common/src/index.ts)
-- Registration example: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)
+- package created under `packages/postprocess-*`
+- `package.json` added
+- `src/index.ts` exports the post-processor
+- `apps/gateway/package.json` updated
+- root `tsconfig.json` path alias updated
+- `apps/gateway/src/app.ts` registration added
+- definition `postprocess` entry added
+- tests added
+- `corepack pnpm validate` passes
+
+## Reference Implementations
+
+- Common postprocessors: [`packages/postprocess-common/src/index.ts`](../packages/postprocess-common/src/index.ts)
+- Audit logging: [`packages/postprocess-audit-log/src/index.ts`](../packages/postprocess-audit-log/src/index.ts)

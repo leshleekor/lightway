@@ -3,115 +3,114 @@
 ## 개요
 
 Pre-Processor는 Provider 호출 전에 요청 컨텍스트를 가공하는 컴포넌트입니다.
-실행 순서는 다음과 같습니다.
 
-1. 입력 검증
-2. 컨텍스트 로드
-3. Pre-Processor 실행
-4. RAG 실행
-5. Provider 호출
+이 모노레포에서 새 Pre-Processor를 추가하려면 보통 아래 순서가 필요합니다.
 
-즉, Pre-Processor는 사용자 입력, 메시지 목록, 메타데이터를 정리하거나 보강하는 역할에 적합합니다.
+1. 워크스페이스 패키지 생성
+2. `Preprocessor` 계약 구현
+3. `src/index.ts` export 추가
+4. `apps/gateway` dependency 추가
+5. 루트 `tsconfig.json` path alias 추가
+6. bootstrap 등록
+7. Definition에서 참조
+8. 테스트 추가 후 `corepack pnpm validate` 실행
 
-## 구현해야 하는 인터페이스
+## 1. 워크스페이스 패키지 생성
 
-```ts
-import type { LightwayContext, Preprocessor } from "@lightway/core";
+권장 구조:
 
-export class ExamplePreprocessor implements Preprocessor {
-  readonly name = "example-preprocessor";
+```text
+packages/
+  preprocess-custom/
+    package.json
+    src/
+      index.ts
+```
 
-  async run(context: LightwayContext): Promise<LightwayContext> {
-    return context;
+최소 `package.json`:
+
+```json
+{
+  "name": "@lightway/preprocess-custom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lightway/core": "workspace:*"
   }
 }
 ```
 
-`name`은 Definition의 `preprocess` 배열에서 참조하는 식별자입니다.
+## 2. Pre-Processor 구현
 
-Definition별 설정이 필요하다면 `context.definition.preprocessConfig?.[preprocessorName]`에서 읽을 수 있습니다.
-
-## 구현 예시
-
-아래 예시는 문자열 입력을 정규화하고, 마지막 사용자 메시지도 함께 맞춰 주는 형태입니다.
+최소 구현 패턴:
 
 ```ts
 import type { LightwayContext, Preprocessor } from "@lightway/core";
-
-function normalizeInput(value: unknown): unknown {
-  if (typeof value === "string") {
-    return value.trim().replace(/\s+/g, " ");
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeInput(item));
-  }
-
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, current]) => [key, normalizeInput(current)])
-    );
-  }
-
-  return value;
-}
 
 export class NormalizeInputPreprocessor implements Preprocessor {
   readonly name = "normalize-input";
 
   async run(context: LightwayContext): Promise<LightwayContext> {
-    const normalizedInput = normalizeInput(context.input);
-    const nextMessages = [...context.messages];
-
-    for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
-      const message = nextMessages[index];
-      if (!message) {
-        continue;
-      }
-
-      if (message.role === "user" && message.metadata?.source !== "rag") {
-        nextMessages[index] = {
-          ...message,
-          content:
-            typeof normalizedInput === "string"
-              ? normalizedInput
-              : JSON.stringify(normalizedInput, null, 2)
-        };
-        break;
-      }
-    }
+    const normalizedInput =
+      typeof context.input === "string" ? context.input.trim() : context.input;
 
     return {
       ...context,
-      input: normalizedInput,
-      messages: nextMessages,
-      metadata: {
-        ...context.metadata,
-        normalizedBy: this.name
-      }
+      input: normalizedInput
     };
   }
 }
 ```
 
-## Registry에 등록
+참고:
 
-부팅 시 Pre-Processor를 등록합니다.
+- `name`은 Definition의 `preprocess` 배열에서 쓰는 식별자입니다
+- `context.input`을 바꾸면 `context.messages`도 같이 맞춰야 하는 경우가 많습니다
+- Definition별 설정은 `context.definition.preprocessConfig`에서 읽을 수 있습니다
+
+## 3. 워크스페이스에 연결
+
+### `apps/gateway` dependency 추가
+
+```json
+{
+  "dependencies": {
+    "@lightway/preprocess-custom": "workspace:*"
+  }
+}
+```
+
+### 루트 path alias 추가
+
+```json
+{
+  "compilerOptions": {
+    "paths": {
+      "@lightway/preprocess-custom": [
+        "packages/preprocess-custom/src/index.ts"
+      ]
+    }
+  }
+}
+```
+
+### bootstrap 등록
+
+[`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)에 등록합니다.
 
 ```ts
-import { createLightwayRegistry } from "@lightway/core";
-import { NormalizeInputPreprocessor } from "@lightway/plugin-preprocess-custom";
-
-const registry = createLightwayRegistry();
+import { NormalizeInputPreprocessor } from "@lightway/preprocess-custom";
 
 registry.registerPreprocessor(new NormalizeInputPreprocessor());
 ```
 
-현재 기본 등록 예시는 [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)에 있습니다.
+## 4. Definition에서 사용
 
-## Definition에서 사용
-
-Definition JSON의 `preprocess` 배열에 이름을 추가하면 순서대로 실행됩니다.
+Definition의 `preprocess` 배열에 이름을 추가합니다.
 
 ```json
 {
@@ -131,9 +130,7 @@ Definition JSON의 `preprocess` 배열에 이름을 추가하면 순서대로 �
 }
 ```
 
-배열 순서가 그대로 실행 순서입니다.
-
-Definition별 설정은 `preprocessConfig`로 함께 전달할 수 있습니다.
+Definition별 설정이 필요하면 `preprocessConfig`를 씁니다.
 
 ```json
 {
@@ -144,42 +141,49 @@ Definition별 설정은 `preprocessConfig`로 함께 전달할 수 있습니다.
   "inputSchema": {
     "type": "object",
     "properties": {
-      "message": { "type": "string" },
-      "customerName": { "type": "string" }
+      "message": { "type": "string" }
     },
     "required": ["message"],
     "additionalProperties": false
   },
-  "preprocess": ["pii-masking"],
+  "preprocess": ["normalize-input"],
   "preprocessConfig": {
-    "pii-masking": {
-      "fieldNames": {
-        "customerName": "full-masking",
-        "deliveryAddress": "sample-masking"
-      }
+    "normalize-input": {
+      "trim": true
     }
   }
 }
 ```
 
-## 언제 사용하면 좋은가
+## 5. 테스트와 패키지 문서 추가
 
-- 입력 문자열 정리
-- 민감 정보 마스킹
-- 공통 메타데이터 주입
-- 입력 객체를 내부 표준 형식으로 변환
-- RAG 이전에 쿼리 문장을 정제
+권장 후속 작업:
 
-## 구현 시 주의사항
+- `tests/preprocess-custom.test.ts` 추가
+- `context.input`, `context.messages`, `context.metadata` 변화 검증
+- `preprocessConfig`를 쓴다면 설정 경로 테스트 추가
+- 기대하는 설정 구조를 설명하는 패키지 README 추가
 
-- 가능하면 기존 `context`를 직접 변경하지 말고 새 객체를 반환하세요.
-- `context.input`을 바꿨다면 Provider에 전달될 `context.messages`도 같이 맞추는 것이 안전합니다.
-- Definition별 동작 차이가 있다면 기대하는 `preprocessConfig` 구조를 문서화하는 편이 좋습니다.
-- 예외가 발생하면 오케스트레이터가 `PREPROCESS_FAILED`로 감싸서 처리합니다.
-- 등록되지 않은 이름이 Definition에 들어가면 로딩 시 warning이 남고, 실제 실행 시에는 오류가 발생합니다.
+## 실무 팁
+
+- 가능하면 기존 객체를 mutate하지 말고 새 context를 반환하세요.
+- 등록되지 않은 preprocessor를 Definition이 참조하면 로딩 시 warning이 남고, 실제 실행 시 오류가 납니다.
+- 현재 네이밍 규칙은 `preprocess-*`입니다. `plugin-preprocess-*` 예시는 쓰지 마십시오.
+- 등록 후에는 `corepack pnpm validate`로 바로 확인하세요.
+
+## 통합 체크리스트
+
+- `packages/preprocess-*` 아래 패키지 생성 완료
+- `package.json` 작성 완료
+- `src/index.ts` export 완료
+- `apps/gateway/package.json` 반영 완료
+- 루트 `tsconfig.json` path alias 반영 완료
+- `apps/gateway/src/app.ts` 등록 완료
+- Definition `preprocess` 항목 추가 완료
+- 테스트 추가 완료
+- `corepack pnpm validate` 통과 확인
 
 ## 참고 구현
 
-- 기본 구현: [`packages/preprocess-common/src/index.ts`](../packages/preprocess-common/src/index.ts)
-- 개인정보 마스킹 예시: [`packages/preprocess-pii-masking/src/index.ts`](../packages/preprocess-pii-masking/src/index.ts)
-- 등록 예시: [`apps/gateway/src/app.ts`](../apps/gateway/src/app.ts)
+- 기본 전처리기: [`packages/preprocess-common/src/index.ts`](../packages/preprocess-common/src/index.ts)
+- PII 마스킹: [`packages/preprocess-pii-masking/src/index.ts`](../packages/preprocess-pii-masking/src/index.ts)
