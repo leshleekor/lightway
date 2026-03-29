@@ -34,14 +34,16 @@ Definition에서 사용:
     "type": "object",
     "properties": {
       "message": { "type": "string" },
-      "customer": {
+      "data": {
         "type": "object",
         "properties": {
           "customerName": { "type": "string" },
+          "receiverName": { "type": "string" },
           "customerEmail": { "type": "string" },
           "customerPhone": { "type": "string" },
           "deliveryAddress": { "type": "string" }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "required": ["message"],
@@ -102,11 +104,13 @@ curl -X POST http://localhost:3000/v1/execute \
     "contextId": "ctx-pii-1",
     "input": {
       "message": "Repeat the customer fields exactly as you received them.",
-      "customerName": "Alice Kim",
-      "receiverName": "Bob Lee",
-      "customerEmail": "alice@example.com",
-      "customerPhone": "010-1234-5678",
-      "deliveryAddress": "서울시 강남구 테헤란로 123"
+      "data": {
+        "customerName": "Alice Kim",
+        "receiverName": "Bob Lee",
+        "customerEmail": "alice@example.com",
+        "customerPhone": "010-1234-5678",
+        "deliveryAddress": "서울시 강남구 테헤란로 123"
+      }
     }
   }'
 ```
